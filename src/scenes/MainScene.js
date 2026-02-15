@@ -3,9 +3,9 @@ import AIMatchScene from './GameScenes/AIMatchScene.js';
 import PracticeScene from './GameScenes/PracticeScene.js';
 import StartGameOverlayScene from './GameScenes/StartGameOverlayScene.js'; // Import the overlay scene
 
-export default class Game extends Phaser.Scene {
+export default class MainScene extends Phaser.Scene {
   constructor() {
-    super('game');
+    super('main-scene');
     this.currentScene = 'PracticeScene'; // Default starting scene
   }
 

@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import Game from './scenes/Game.js';
+import MainScene from './scenes/MainScene.js';
 import UIScene from './scenes/UIScene.js';
 import StartGameOverlayScene from './scenes/GameScenes/StartGameOverlayScene.js';
 
@@ -16,7 +16,12 @@ const config = {
     },
   },
   // 使用するシーンのリスト
-  scene: [Game, UIScene, StartGameOverlayScene]
+  scene: [
+    MainScene,
+    UIScene,
+    StartGameOverlayScene,
+    
+  ]
 };
 
 // ゲームインスタンスを生成
