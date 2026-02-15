@@ -2,6 +2,7 @@
 import Puyo from '../core/Puyo.js';
 import Board from '../core/Board.js';
 
+
 /**
  * Helper function to simulate placing a puyo and its chain reaction on a given board.
  * @param {Board} simBoard - The board instance to simulate on (should be a clone).
