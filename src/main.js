@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import MainScene from './scenes/MainScene.js';
 import UIScene from './scenes/UIScene.js';
-import StartGameOverlayScene from './scenes/GameScenes/StartGameOverlayScene.js';
+import StartGameOverlayScene from './scenes/ui-scenes/StartScene.js';
 
 // ゲームの設定オブジェクト
 const config = {
@@ -20,7 +20,7 @@ const config = {
     MainScene,
     UIScene,
     StartGameOverlayScene,
-    
+
   ]
 };
 

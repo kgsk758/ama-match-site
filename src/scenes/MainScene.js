@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
-import AIMatchScene from './GameScenes/AIMatchScene.js';
-import PracticeScene from './GameScenes/PracticeScene.js';
-import StartGameOverlayScene from './GameScenes/StartGameOverlayScene.js'; // Import the overlay scene
+import AIMatchScene from './game-scenes/AIMatchScene.js';
+import PracticeScene from './game-scenes/PracticeScene.js';
+import StartGameOverlayScene from './ui-scenes/StartScene.js'; // Import the overlay scene
 
 export default class MainScene extends Phaser.Scene {
   constructor() {
