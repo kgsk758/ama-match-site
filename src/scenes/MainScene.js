@@ -15,13 +15,10 @@ export default class MainScene extends Phaser.Scene {
 
     // Launch the UI scene in parallel. It will run independently on top.
     this.scene.launch(SCENE_KEYS.UI_SCENE);
+    this.scene.bringToTop(SCENE_KEYS.UI_SCENE);
 
     // Listen for events from the UIScene
     this.game.events.on('modeSelectClicked', this.handleModeSelect, this);
-    this.game.events.on('settingsClicked', this.handleSettings, this);
-
-    // Listen for the startGame event from the overlay
-    this.game.events.on('startGame', this.startActualGame, this);
 
   }
 
@@ -34,13 +31,12 @@ export default class MainScene extends Phaser.Scene {
     console.log(`Game scene received modeSelectClicked event, attempting to switch to: ${newSceneKey}`);
 
     const idxTo = GAME_SCENE_IDX[newSceneKey];
-    const idxNow = GAME_SCENE_IDX[this.currentSceneKey];
 
     // Slide all game cameras
     SCENE_ORDER.forEach(sceneKey => {
       const gameScene = this.scene.get(sceneKey);
       if (gameScene && gameScene.slideSceneTo) {
-        gameScene.slideSceneTo(idxTo, idxNow);
+        gameScene.slideSceneTo(idxTo);
       }
     });
 
