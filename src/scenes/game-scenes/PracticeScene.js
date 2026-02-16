@@ -1,7 +1,7 @@
-import GameSceneBase from './GameSceneBase';
+import BaseGameScene from './BaseGameScene';
 import { SCENE_KEYS } from '../../constants';
 
-export default class PracticeScene extends GameSceneBase {
+export default class PracticeScene extends BaseGameScene {
   constructor() {
     super(SCENE_KEYS.PRACTICE_SCENE);
   }

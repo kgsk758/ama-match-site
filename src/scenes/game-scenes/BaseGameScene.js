@@ -1,7 +1,7 @@
 import Phaser from "phaser";
 import { GAME_SCENE_IDX , UI_CONFIG} from "../../constants";
 
-export default class GameSceneBase extends Phaser.Scene {
+export default class BaseGameScene extends Phaser.Scene {
     constructor(sceneKey){
         super(sceneKey);
         this.currentCameraTween = null; // Store reference to the active tween

@@ -1,7 +1,7 @@
-import GameSceneBase from './GameSceneBase';
+import BaseGameScene from './BaseGameScene';
 import { SCENE_KEYS } from '../../constants';
 
-export default class AIMatchScene extends GameSceneBase {
+export default class AIMatchScene extends BaseGameScene {
   constructor() {
     super(SCENE_KEYS.AI_MATCH_SCENE);
   }

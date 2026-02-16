@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { SCENE_KEYS } from '../constants';
+import MenuButton from '../components/Buttons/MenuButton';
 
 export default class UIScene extends Phaser.Scene {
   constructor() {
@@ -41,5 +42,8 @@ export default class UIScene extends Phaser.Scene {
       console.log('AI Match Button Clicked');
       this.game.events.emit('modeSelectClicked', SCENE_KEYS.AI_MATCH_SCENE);
     });
+
+    const menuButtonTest = new MenuButton(this, gameWidth / 2, uiBarHeight/2)
+      .setDepth(2);
   }
 }
