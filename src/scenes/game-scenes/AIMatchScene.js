@@ -1,7 +1,7 @@
-import Phaser from 'phaser';
+import GameSceneBase from './GameSceneBase';
 import { SCENE_KEYS } from '../../constants';
 
-export default class AIMatchScene extends Phaser.Scene {
+export default class AIMatchScene extends GameSceneBase {
   constructor() {
     super(SCENE_KEYS.AIMATCHSCENE);
   }
