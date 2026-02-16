@@ -1,8 +1,9 @@
 import Phaser from 'phaser';
+import { SCENE_KEYS } from '../../constants';
 
 export default class PracticeScene extends Phaser.Scene {
   constructor() {
-    super('PracticeScene');
+    super(SCENE_KEYS.PRACTICESCENE);
   }
 
   create() {

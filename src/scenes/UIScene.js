@@ -1,8 +1,9 @@
 import Phaser from 'phaser';
+import { SCENE_KEYS } from '../constants';
 
 export default class UIScene extends Phaser.Scene {
   constructor() {
-    super('UIScene');
+    super(SCENE_KEYS.UISCENE);
   }
 
   create() {

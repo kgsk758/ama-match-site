@@ -1,41 +1,49 @@
 import Phaser from 'phaser';
-import AIMatchScene from './game-scenes/AIMatchScene.js';
-import PracticeScene from './game-scenes/PracticeScene.js';
-import StartGameOverlayScene from './ui-scenes/StartScene.js'; // Import the overlay scene
+import { SCENE_KEYS } from '../constants';
 
 export default class MainScene extends Phaser.Scene {
   constructor() {
-    super('main-scene');
-    this.currentScene = 'PracticeScene'; // Default starting scene
+    super(SCENE_KEYS.MAIN_SCENE);
   }
 
   create() {
+    this.currentSceneKey = SCENE_KEYS.PRACTICE_SCENE; // Default starting scene
     this.gameStarted = {
-      'PracticeScene': false,
-      'AIMatchScene': false,
+      [SCENE_KEYS.PRACTICE_SCENE]: false,
+      [SCENE_KEYS.AI_MATCH_SCENE]: false,
     };
 
-    // Add both scenes but don't start them yet
-    this.practiceScene = this.scene.add('PracticeScene', PracticeScene, false);
-    this.aiMatchScene = this.scene.add('AIMatchScene', AIMatchScene, false);
-
-    const gameWidth = Number(this.sys.game.config.width);
-    const gameHeight = Number(this.sys.game.config.height);
+    this.gameWidth = Number(this.sys.game.config.width);
+    this.gameHeight = Number(this.sys.game.config.height);
 
     // Launch both game content scenes. They will run in parallel.
-    this.scene.launch('PracticeScene');
-    this.scene.launch('AIMatchScene');
+    this.scene.launch(SCENE_KEYS.PRACTICE_SCENE);
+    this.scene.launch(SCENE_KEYS.AI_MATCH_SCENE);
 
     // Make sure the scenes are created and accessible
-    const practiceSceneInstance = this.scene.get('PracticeScene');
-    const aiMatchSceneInstance = this.scene.get('AIMatchScene');
+    const practiceSceneInstance = this.scene.get(SCENE_KEYS.PRACTICE_SCENE);
+    const aiMatchSceneInstance = this.scene.get(SCENE_KEYS.AI_MATCH_SCENE);
 
-    // Set the camera bounds to cover both scenes side-by-side
-    this.cameras.main.setBounds(0, 0, gameWidth * 2, gameHeight);
-    this.cameras.main.scrollX = 0; // Initial camera position: show the Practice Scene
+    //set the viewports
+    this.practiceCam = practiceSceneInstance.cameras.main;
+    this.aiCam = aiMatchSceneInstance.cameras.main;
+
+    this.practiceCam.setViewport(0, 0, this.gameWidth, this.gameHeight);
+    this.aiCam.setViewport(this.gameWidth, 0, this.gameWidth, this.gameHeight);
+
+    // Initialize an array to hold game scene cameras in the order defined in SCENE_ORDER
+    this.gameSceneOrder = SCENE_ORDER;
+    this.gameSceneCameras = [];
+    SCENE_ORDER.forEach(key => {
+      if (key === SCENE_KEYS.PRACTICE_SCENE) {
+        this.gameSceneCameras.push(this.practiceCam);
+      } else if (key === SCENE_KEYS.AI_MATCH_SCENE) {
+        this.gameSceneCameras.push(this.aiCam);
+      }
+    });
 
     // Launch the UI scene in parallel. It will run independently on top.
-    this.scene.launch('UIScene');
+    this.scene.launch(SCENE_KEYS.UI_SCENE);
 
     // Listen for events from the UIScene
     this.game.events.on('modeSelectClicked', this.handleModeSelect, this);
@@ -45,17 +53,41 @@ export default class MainScene extends Phaser.Scene {
     this.game.events.on('startGame', this.startActualGame, this);
 
     // Initially launch the overlay for the default scene
-    this.launchOverlay(this.currentScene);
+    this.launchOverlay(this.currentSceneKey);
   }
 
   handleModeSelect() {
     console.log('Game scene received modeSelectClicked event.');
     // Toggle between Practice and AI Match scenes
-    if (this.currentScene === 'PracticeScene') {
-      this.switchToScene('AIMatchScene', 'AI Match Mode');
+    if (this.currentSceneKey === SCENE_KEYS.PRACTICE_SCENE) {
+      this.switchToScene(SCENE_KEYS.AI_MATCH_SCENE);
     } else {
-      this.switchToScene('PracticeScene', 'Practice Alone Mode');
+      this.switchToScene(SCENE_KEYS.PRACTICE_SCENE);
     }
+  }
+
+  /**
+   * Switches to a new game scene with a camera slide animation.
+   * @param {string} newSceneKey - The key of the scene to switch to.
+   */
+  switchToScene(newSceneKey) {
+    if (this.currentSceneKey === newSceneKey) {
+      return; // Already on this scene
+    }
+
+    const prevSceneKey = this.currentSceneKey;
+    this.currentSceneKey = newSceneKey;
+
+    const fromIdx = GAME_SCENE_IDX[prevSceneKey];
+    const toIdx = GAME_SCENE_IDX[newSceneKey];
+
+    // Slide the cameras
+    this.slideToScene(this.gameSceneCameras, toIdx, fromIdx);
+
+    // Launch the overlay for the new scene
+    // The modeTitle can be inferred from the sceneKey or passed explicitly if needed
+    const modeTitle = (newSceneKey === SCENE_KEYS.PRACTICE_SCENE) ? 'Practice Alone Mode' : 'AI Match Mode';
+    this.launchOverlay(this.currentSceneKey, modeTitle);
   }
 
   handleSettings() {
@@ -71,44 +103,36 @@ export default class MainScene extends Phaser.Scene {
 
     // Launch the overlay scene, passing the mode title and the key of the scene it's for
     this.scene.launch('StartGameOverlayScene', {
-        modeTitle: modeTitle || (sceneKey === 'PracticeScene' ? 'Practice Alone Mode' : 'AI Match Mode'),
+        modeTitle: modeTitle || (sceneKey === SCENE_KEYS.PRACTICE_SCENE ? 'Practice Alone Mode' : 'AI Match Mode'),
         gameSceneKey: sceneKey
     });
   }
 
-  // Method to switch scenes with a slide effect
-  switchToScene(sceneName, modeTitle) {
-    if (this.currentScene === sceneName) {
-      console.log(`Already in ${sceneName}`);
-      // If already in the scene, just relaunch the overlay
-      this.launchOverlay(sceneName, modeTitle);
-      return;
+  /**
+   * @param {[Phaser.Cameras.Scene2D.Camera]} cameras
+   * @param {Number} toIdx -index of the scene you want to slide to
+   * @param {Number} nowIdx -index of the scene now
+   */
+  slideToScene(cameras, idxTo, idxNow){
+    const deltaX = this.gameWidth*(idxTo - idxNow)*-1;
+    for(const camera of cameras){
+      const cameraX = camera.x;
+      const newCameraX = cameraX + deltaX;
+      this.moveScene(camera, newCameraX);
     }
-
-    const gameWidth = Number(this.sys.game.config.width);
-    let targetScrollX = 0;
-
-    if (sceneName === 'AIMatchScene') {
-      targetScrollX = gameWidth; // Move camera to show AI Match Scene
-    } else if (sceneName === 'PracticeScene') {
-      targetScrollX = 0; // Move camera to show Practice Scene
-    } else {
-      console.warn(`Unknown scene: ${sceneName}`);
-      return;
-    }
-
+  }
+  /**
+   * @param {Phaser.Cameras.Scene2D.Camera} camera
+   * @param {Number} x -Move scene to x
+   */
+  moveScene(camera, x){
     this.tweens.add({
-      targets: this.cameras.main,
-      scrollX: targetScrollX,
-      duration: 500, // Adjust duration for desired speed
-      ease: 'Power2',
-      onComplete: () => {
-        this.currentScene = sceneName;
-        console.log(`Switched to ${sceneName}`);
-        // Launch the overlay after the camera has finished moving
-        this.launchOverlay(sceneName, modeTitle);
+        targets: camera,
+        x: x,
+        ease: 'Power2',
+        duration: 800
       }
-    });
+    );
   }
 
   startActualGame(gameSceneKey) {

@@ -1,13 +1,15 @@
 import Phaser from 'phaser';
+import { UI_CONFIG } from './constants.js';
 import MainScene from './scenes/MainScene.js';
 import UIScene from './scenes/UIScene.js';
-import StartGameOverlayScene from './scenes/ui-scenes/StartScene.js';
+import AIMatchScene from './scenes/game-scenes/AIMatchScene.js';
+import PracticeScene from './scenes/game-scenes/PracticeScene.js';
 
 // ゲームの設定オブジェクト
 const config = {
   type: Phaser.AUTO, // WebGLを優先的に使用し、対応していなければCanvasにフォールバック
-  width: 800,
-  height: 600,
+  width: UI_CONFIG.GAME_WIDTH,
+  height: UI_CONFIG.GAME_HEIGHT,
   parent: 'game-container', // ゲームキャンバスを描画するDOM要素のID（index.htmlには不要）
   physics: {
     default: 'arcade',
@@ -19,8 +21,8 @@ const config = {
   scene: [
     MainScene,
     UIScene,
-    StartGameOverlayScene,
-
+    AIMatchScene,
+    PracticeScene
   ]
 };
 
