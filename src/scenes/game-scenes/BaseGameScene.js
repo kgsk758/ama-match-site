@@ -9,15 +9,16 @@ export default class BaseGameScene extends Phaser.Scene {
 
     init(){
         this.sceneIdx = GAME_SCENE_IDX[this.scene.key];
-        this.gameWidth = Number(this.sys.game.config.width);
-        this.gameHeight = Number(this.sys.game.config.height);
+        this.gameWidth = this.scale.width;
+        this.gameHeight = this.scale.height*(1 - UI_CONFIG.UI_TO_HEIGHT);
+        this.gameSceneY = this.scale.height - this.gameHeight;
         this.mainCamera = this.cameras.main;
         this.offSetViewport();
     }
 
     offSetViewport(){
         const offSetX = this.gameWidth*this.sceneIdx;
-        this.mainCamera.setViewport(offSetX, 0, this.gameWidth, this.gameHeight);
+        this.mainCamera.setViewport(offSetX, this.gameSceneY, this.gameWidth, this.gameHeight);
     }
 
     slideSceneTo(idxTo){

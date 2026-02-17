@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { SCENE_KEYS } from '../constants';
+import { SCENE_KEYS, UI_CONFIG } from '../constants';
 import MenuButton from '../components/Buttons/MenuButton';
 
 export default class UIScene extends Phaser.Scene {
@@ -8,12 +8,10 @@ export default class UIScene extends Phaser.Scene {
   }
 
   create() {
-    const gameWidth = Number(this.sys.game.config.width);
-    const uiBarHeight = 60; // Height of the UI bar
-
+    const gameWidth = this.scale.width;
+    const uiBarHeight = this.scale.height*UI_CONFIG.UI_TO_HEIGHT;
     // Create a graphics object for the background of the UI bar
-    this.add.rectangle(gameWidth / 2, uiBarHeight / 2, gameWidth, uiBarHeight, 0x333333)
-      .setDepth(1); // Ensure it's on top
+    this.add.rectangle(gameWidth / 2, uiBarHeight / 2, gameWidth, uiBarHeight, 0x333333);
 
     // Practice Scene Button
     const practiceButton = this.add.text(50, uiBarHeight / 2, 'Practice', {
@@ -21,8 +19,7 @@ export default class UIScene extends Phaser.Scene {
       fill: '#ffffff'
     })
     .setOrigin(0, 0.5)
-    .setInteractive()
-    .setDepth(2);
+    .setInteractive();
 
     practiceButton.on('pointerdown', () => {
       console.log('Practice Button Clicked');
@@ -35,15 +32,13 @@ export default class UIScene extends Phaser.Scene {
       fill: '#ffffff'
     })
     .setOrigin(0, 0.5)
-    .setInteractive()
-    .setDepth(2);
+    .setInteractive();
 
     aiMatchButton.on('pointerdown', () => {
       console.log('AI Match Button Clicked');
       this.game.events.emit('modeSelectClicked', SCENE_KEYS.AI_MATCH_SCENE);
     });
 
-    const menuButtonTest = new MenuButton(this, gameWidth / 2, uiBarHeight/2)
-      .setDepth(2);
+    const menuButtonTest = new MenuButton(this, gameWidth / 2, uiBarHeight/2);
   }
 }

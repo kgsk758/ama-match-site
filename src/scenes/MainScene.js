@@ -15,7 +15,7 @@ export default class MainScene extends Phaser.Scene {
 
     // Launch the UI scene in parallel. It will run independently on top.
     this.scene.launch(SCENE_KEYS.UI_SCENE);
-    this.scene.bringToTop(SCENE_KEYS.UI_SCENE);
+    //this.scene.bringToTop(SCENE_KEYS.UI_SCENE);
 
     // Listen for events from the UIScene
     this.game.events.on('modeSelectClicked', this.handleModeSelect, this);

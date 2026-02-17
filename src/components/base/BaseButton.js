@@ -10,6 +10,7 @@ export default class BaseButton extends Phaser.GameObjects.Container{
     constructor(scene, x, y){
         super(scene, x, y);
         this.isButtonPressed = false;
+        this.scene.add.existing(this);
     }
     enterHoverState(){
 
@@ -28,8 +29,8 @@ export default class BaseButton extends Phaser.GameObjects.Container{
     }
     buttonClicked(){
     }
-    
     initInteractive(){
+        this.setSize(this.getBounds().width, this.getBounds().height); // Set the interactive size using getBounds() as requested
         this.setInteractive({useHandCursor: true})
             .on("pointerover", ()=>this.enterHoverState())
             .on("pointerout", ()=>this.leaveHoverState())
