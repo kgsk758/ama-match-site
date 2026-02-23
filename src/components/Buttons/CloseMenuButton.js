@@ -1,7 +1,7 @@
 import BaseButton from "../base/BaseButton";
 import { EVENT_NAMES } from "../../constants";
 
-export default class MenuButton extends BaseButton{
+export default class CloseMenuButton extends BaseButton{
     /**
      * 
      * @param {Phaser.Scene} scene 
@@ -10,17 +10,14 @@ export default class MenuButton extends BaseButton{
      */
     constructor(scene, x, y){
         super(scene, x, y);
-        
-        const buttonText = this.scene.add.text(0, 0, "Menu");
-        buttonText.setOrigin(0.5); // Center the text within the container
+        const buttonText = this.scene.add.text(0, 0, 'close');
+        buttonText.setOrigin(0.5);
         this.add(buttonText);
-        
         this.initInteractive();
     }
 
     buttonClicked(){
-        console.log("menu button clicked")
-        console.log(EVENT_NAMES.OPEN_MENU);
-        this.scene.game.events.emit(EVENT_NAMES.OPEN_MENU);
+        console.log(this.scene.scene.key)
+        this.scene.game.events.emit(EVENT_NAMES.CLOSE_MENU+this.scene.scene.key);
     }
 }

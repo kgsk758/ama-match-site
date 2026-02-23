@@ -1,13 +1,18 @@
 import Phaser from 'phaser';
-import { SCENE_KEYS, UI_CONFIG } from '../constants';
+import { SCENE_KEYS, UI_CONFIG, EVENT_NAMES } from '../constants';
 import MenuButton from '../components/Buttons/MenuButton';
 
 export default class UIScene extends Phaser.Scene {
   constructor() {
     super(SCENE_KEYS.UI_SCENE);
   }
-
+  init(data){
+    this.mainScene=data.parent;
+  }
   create() {
+    this.game.events.on(EVENT_NAMES.OPEN_MENU, ()=>{this.handleMenuEvents(EVENT_NAMES.OPEN_MENU)});
+    this.game.events.on(EVENT_NAMES.CLOSE_MENU, ()=>{this.handleMenuEvents(EVENT_NAMES.CLOSE_MENU)});
+    
     const gameWidth = this.scale.width;
     const uiBarHeight = this.scale.height*UI_CONFIG.UI_TO_HEIGHT;
     // Create a graphics object for the background of the UI bar
@@ -40,5 +45,10 @@ export default class UIScene extends Phaser.Scene {
     });
 
     const menuButtonTest = new MenuButton(this, gameWidth / 2, uiBarHeight/2);
+  }
+
+  handleMenuEvents(menuEventName){  
+    const emitEvent = menuEventName+this.mainScene.currentSceneKey;
+    this.game.events.emit(emitEvent);
   }
 }

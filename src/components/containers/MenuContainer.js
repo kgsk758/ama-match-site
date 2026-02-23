@@ -1,5 +1,6 @@
 import BaseMenuContainer from "../base/BaseMenuContainer";
 import { UI_CONFIG } from "../../constants";
+import CloseMenuButton from "../Buttons/CloseMenuButton";
 
 export default class MenuContainer extends BaseMenuContainer{
     /**
@@ -16,5 +17,8 @@ export default class MenuContainer extends BaseMenuContainer{
         const width = gameWidth * widthRatio;
         const height = gameHeight * heightRatio;
         super(scene, x, y, width, height);
+
+        const closeButton = new CloseMenuButton(scene, width/2, height*0.9);
+        this.add(closeButton);
     }
 }

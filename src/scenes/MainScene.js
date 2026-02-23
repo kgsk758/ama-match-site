@@ -14,7 +14,7 @@ export default class MainScene extends Phaser.Scene {
     this.scene.launch(SCENE_KEYS.AI_MATCH_SCENE);
 
     // Launch the UI scene in parallel. It will run independently on top.
-    this.scene.launch(SCENE_KEYS.UI_SCENE);
+    this.scene.launch(SCENE_KEYS.UI_SCENE, {parent:this});
     //this.scene.bringToTop(SCENE_KEYS.UI_SCENE);
 
     // Listen for events from the UIScene

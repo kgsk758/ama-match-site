@@ -37,3 +37,8 @@ export const SCENE_ORDER = [
     SCENE_KEYS.AI_MATCH_SCENE,
 
 ];
+
+export const EVENT_NAMES = {
+    CLOSE_MENU: 'close_menu',
+    OPEN_MENU: 'open_menu'
+}
