@@ -40,5 +40,9 @@ export const SCENE_ORDER = [
 
 export const EVENT_NAMES = {
     CLOSE_MENU: 'close_menu',
-    OPEN_MENU: 'open_menu'
+    OPEN_MENU: 'open_menu',
+    CLOSE_MENU_WHILE_START: 'close_menu_while_start',
+    OPEN_MENU_WHILE_START: 'open_menu_while_start',
+    START_BUTTON_PRESSED: 'start_button_pressed',
+    START_READYGO: 'start_readygo',
 }

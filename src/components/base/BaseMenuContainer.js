@@ -23,10 +23,10 @@ export default class BaseMenuContainer extends Phaser.GameObjects.Container{
             this.gameWidth,
             this.gameHeight,
             0x000000,
-            0.1
+            0.3
         );
         this.barrier.setInteractive()
-            .on("pointerdown", ()=>this.quitMenu());
+            .on("pointerdown", ()=>this.barrierClicked());
         // Do NOT add barrier to this container, it should be a scene-level overlay
 
         const graphics = this.scene.add.graphics();
@@ -38,9 +38,6 @@ export default class BaseMenuContainer extends Phaser.GameObjects.Container{
             new Phaser.Geom.Rectangle(0, 0, width, height), 
             Phaser.Geom.Rectangle.Contains
         );
-
-        this.scene.game.events.on(EVENT_NAMES.CLOSE_MENU+this.scene.scene.key, this.quitMenu, this);
-        this.scene.game.events.on(EVENT_NAMES.OPEN_MENU+this.scene.scene.key, this.openMenu, this);
     }
     openMenu(){
         if(this.barrier){
@@ -50,6 +47,7 @@ export default class BaseMenuContainer extends Phaser.GameObjects.Container{
             child.setInteractive?.();
         })
         console.log("openMenu() caled!")
+        this.barrier.setVisible(true);
         this.setVisible(true);
     }
     
@@ -61,7 +59,13 @@ export default class BaseMenuContainer extends Phaser.GameObjects.Container{
             child.disableInteractive?.();
         })
         console.log("quitMenu() called!");
+        this.barrier.setVisible(false);
         this.setVisible(false);
+        this.scene.input.setDefaultCursor('default');
+    }
+
+    barrierClicked(){
+
     }
 
     createMenuButton(){

@@ -14,6 +14,7 @@ export default class BaseGameScene extends Phaser.Scene {
         this.gameSceneY = this.scale.height - this.gameHeight;
         this.mainCamera = this.cameras.main;
         this.offSetViewport();
+        this.gamePlaying = false;
     }
 
     offSetViewport(){

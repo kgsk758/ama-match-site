@@ -1,5 +1,5 @@
 import BaseMenuContainer from "../base/BaseMenuContainer";
-import { UI_CONFIG } from "../../constants";
+import { UI_CONFIG, EVENT_NAMES } from "../../constants";
 import CloseMenuButton from "../Buttons/CloseMenuButton";
 
 export default class MenuContainer extends BaseMenuContainer{
@@ -20,5 +20,21 @@ export default class MenuContainer extends BaseMenuContainer{
 
         const closeButton = new CloseMenuButton(scene, width/2, height*0.9);
         this.add(closeButton);
+
+        this.scene.game.events.on(EVENT_NAMES.CLOSE_MENU+this.scene.scene.key, this.quitMenu, this);
+        this.scene.game.events.on(EVENT_NAMES.OPEN_MENU+this.scene.scene.key, this.openMenu, this);
+        this.quitMenu();
+    }
+    quitMenu(){
+        super.quitMenu();
+        this.scene.events.emit(EVENT_NAMES.CLOSE_MENU_WHILE_START);
+    }
+    openMenu(){
+        super.openMenu();
+        this.scene.events.emit(EVENT_NAMES.OPEN_MENU_WHILE_START);
+    }
+    barrierClicked(){
+        super.barrierClicked();
+        this.scene.game.events.emit(EVENT_NAMES.CLOSE_MENU);
     }
 }

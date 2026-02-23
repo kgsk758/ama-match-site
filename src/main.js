@@ -13,6 +13,7 @@ const config = {
     width: UI_CONFIG.GAME_WIDTH,
     height: UI_CONFIG.GAME_HEIGHT,
     parent: 'game-container', // ゲームキャンバスを描画するDOM要素のID（index.htmlには不要）
+    resolution: window.devicePixelRatio,
   },
   physics: {
     default: 'arcade',
