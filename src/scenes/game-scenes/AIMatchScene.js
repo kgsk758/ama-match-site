@@ -1,8 +1,9 @@
 import BaseGameScene from './BaseGameScene';
-import { SCENE_KEYS } from '../../constants';
+import { SCENE_KEYS,PLAYER_CONFIG } from '../../constants';
 import MenuContainer from '../../components/containers/MenuContainer'; // Import MenuContainer
 import StartContainer from '../../components/containers/StartContainer';
 import ReadyGo from '../../components/ReadyGo';
+import MatchManager from '../../components/MatchManager';
 
 export default class AIMatchScene extends BaseGameScene {
   constructor() {
@@ -18,5 +19,7 @@ export default class AIMatchScene extends BaseGameScene {
     const startContainer = new StartContainer(this, this.gameWidth/2, this.gameHeight/2, this.gameWidth, this.gameHeight);
     this.add.existing(startContainer); // Add to display list
     const readyGo = new ReadyGo(this, this.gameWidth/2, this.gameHeight/2);
+
+    const matchManager = new MatchManager(undefined, [{x:50,y:50},{x:200,y:200}],this);
   }
 }

@@ -27,6 +27,14 @@ export default class Board {
     /**
      * ぷよを配置
      */
+    public isValid(x: number, y: number): boolean{
+        if(x >= this.columns || x < 0 || y >= this.rows || y < 0){
+            return false;
+        }
+        if(this.grid[x][y] === CELL_CONFIG.NONE_NUM) return true;
+
+        return false;
+    }
     public setPuyo(x: number, y: number, cell: number): boolean{
         if(x >= this.columns || x < 0 || y >= this.rows || y < 0 || !CELL_CONFIG.CELL_NUM_TYPES.includes(cell)){
             console.log('failed to setPuyo: invalid input');

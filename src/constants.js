@@ -46,3 +46,9 @@ export const EVENT_NAMES = {
     START_BUTTON_PRESSED: 'start_button_pressed',
     START_READYGO: 'start_readygo',
 }
+
+export const PLAYER_CONFIG = {
+    HUMAN: 'human',
+    AI: 'ai',
+    ONLINE: 'online',
+}
