@@ -25,7 +25,7 @@ export default class Board {
         this.grid = Array.from({length: columns}, ()=>new Array(rows).fill(0));
     }
     /**
-     * ぷよを配置
+     * ぷよを配置可能か
      */
     public isValid(x: number, y: number): boolean{
         if(x >= this.columns || x < 0 || y >= this.rows || y < 0){
@@ -226,6 +226,19 @@ export default class Board {
         }
 
         return chainResults;
+    }
+
+    getDropPlace(): {x:number,y:number}{
+        return {
+            x: Math.floor(this.columns / 2) - 1,
+            y: this.rows - 2.5
+        }
+    }
+    getDeathPlace(): {x:number,y:number}{
+        return {
+            x: Math.floor(this.columns / 2) - 1,
+            y: this.rows - 3
+        }
     }
 
 }
