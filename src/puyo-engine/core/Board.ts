@@ -190,6 +190,7 @@ export default class Board {
         });
     }
     /**
+     * 連鎖を実行し
      * 連鎖情報を配列で返す
      */
     public getChain(): {
@@ -239,6 +240,31 @@ export default class Board {
             x: Math.floor(this.columns / 2) - 1,
             y: this.rows - 3
         }
+    }
+    /**
+     * 落としたおじゃまの数を返す
+     * @param garbage_num - 落とすおじゃまの数(30個より多い場合は30個落とす)
+     */
+    public dropGarbage(garbage_num: number): number{
+        const garbage = (garbage_num > 30)? 30 : garbage_num;
+        const col_garbage = Math.floor(garbage / this.columns);
+        const random_garbage = garbage % this.columns;
+        const random_col = Array.from({ length: this.columns }, (_, i) => i)
+            .sort(() => Math.random() - 0.5) // 簡易的ならこれ、厳密ならFisher-Yates
+            .slice(0, random_garbage);
+        for(let x = 0; x<this.columns; x++){
+            let drop_count = col_garbage + (random_col.includes(x) ? 1 : 0);
+            if (drop_count === 0) continue;
+            for(let y = 0; y<this.rows; y++){
+                if (drop_count === 0) break;
+                
+                if (y < this.rows - 1 && this.grid[x][y] === CELL_CONFIG.NONE_NUM) {
+                    this.grid[x][y] = CELL_CONFIG.GARBAGE_NUM;
+                    drop_count--;
+                }
+            }
+        }
+        return garbage;
     }
 
 }

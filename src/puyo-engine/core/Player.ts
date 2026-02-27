@@ -1,12 +1,11 @@
 import Board from "./Board";
 import Queue from "./Queue";
-import { SEED_CONFIG } from "./core-config";
+import { SEED_CONFIG, SCORE_PER_GARBAGE } from "./core-config";
 export default class Player {
     public board: Board;
     public moving: number[];
     public next: number[][];
     private queue: Queue;
-    private attack: number;
     public allClear: boolean;
     public place: {x:number,y:number}[];
     private dropPlace: {x:number, y:number};
@@ -17,10 +16,28 @@ export default class Player {
         this.place = [{x:0,y:0},{x:0,y:0}];
         this.moving = [];
         this.next = [this.queue.popQueue(), this.queue.popQueue()];
-        this.attack = 0;
         this.allClear = false;
         this.dropPlace = this.board.getDropPlace();
         this.deathPlace = this.board.getDeathPlace();
+    }
+    public score: number = 0;
+    private attack_score: number = 0;
+    private attack: number = 0;
+    /**
+     * 連鎖を実行,スコアに加算,お邪魔生成,連鎖情報を返す。
+     */
+    public getChain(): {
+        connects: {cell: number, places: {x:number, y:number}[]}[],
+        score: number,
+    }[]{
+        const chain = this.board.getChain();
+        chain.forEach((c)=>{
+            this.score += c.score;
+            this.attack_score += c.score;
+        })
+        this.attack += Math.floor(this.attack_score / SCORE_PER_GARBAGE);
+        this.attack_score = this.attack_score % SCORE_PER_GARBAGE;
+        return chain;
     }
     public drop(){
         this.moving = this.next.shift()!;

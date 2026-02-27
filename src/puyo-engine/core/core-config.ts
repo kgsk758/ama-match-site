@@ -53,3 +53,5 @@ export const SCORE_CONFIG = {
 export const SEED_CONFIG = {
     DEFAULT_SEED: 100,
 }
+
+export const SCORE_PER_GARBAGE = 70;
