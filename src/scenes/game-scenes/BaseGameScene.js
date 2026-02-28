@@ -23,22 +23,26 @@ export default class BaseGameScene extends Phaser.Scene {
     }
 
     slideSceneTo(idxTo){
-        // Stop any existing tween on this camera
+        // Calculate the absolute target X position for this camera
+        const targetX = (this.sceneIdx - idxTo) * this.gameWidth;
+
+        // Get the MainScene's tween manager to perform the slide.
+        // This ensures the slide is not affected if this game scene is paused.
+        const mainScene = this.scene.get('mainScene');
+        const tweenManager = mainScene ? mainScene.tweens : this.tweens;
+
+        // Stop any existing tween on this camera (using the manager that created it)
         if (this.currentCameraTween) {
             this.currentCameraTween.stop();
         }
 
-        // Calculate the absolute target X position for this camera
-        // (this.sceneIdx - idxTo) determines the offset from the center scene
-        const targetX = (this.sceneIdx - idxTo) * this.gameWidth;
-
-        this.currentCameraTween = this.tweens.add({
+        this.currentCameraTween = tweenManager.add({
             targets: this.mainCamera,
-            x: targetX, // Use the calculated absolute target X
+            x: targetX,
             ease: UI_CONFIG.SLIDE_EASE,
             duration: UI_CONFIG.SLIDE_DURATION,
             onComplete: () => {
-                this.currentCameraTween = null; // Clear reference when complete
+                this.currentCameraTween = null;
             }
         });
     }

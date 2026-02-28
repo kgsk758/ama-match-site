@@ -5,6 +5,7 @@ import GarbageView from "./GarbageView";
 import ScoreView from "./ScoreView";
 import NextView from "./NextView";
 import { PLAYER_CONFIG } from "../../constants";
+import { CONTROLLER_CONFIG } from "./controller-config";
 
 export default class Controller {
     private player: Player;
@@ -15,12 +16,19 @@ export default class Controller {
     private nextView: NextView;
 
     private dropTimer: number = 0;
-    private readonly DROP_INTERVAL = 1000; 
-    private readonly SOFT_DROP_INTERVAL = 50; // 下入力時のインターバル
+    private horizontalMoveTimer: number = 0;
+
     private downKey: Phaser.Input.Keyboard.Key | null = null;
+    private leftKey: Phaser.Input.Keyboard.Key | null = null;
+    private rightKey: Phaser.Input.Keyboard.Key | null = null;
 
     private isChaining: boolean = false;
     private chainCount: number = 0;
+
+    // 接地（ロックダウン）関連
+    private lockDownTween: Phaser.Tweens.Tween | null = null;
+    private lockDownResetCount: number = 0;
+    private isGrounded: boolean = false; // 接地状態を追跡
 
     constructor(player: Player, scene: Phaser.Scene, place: {x:number, y:number}, config: {team: number, type: string}) {
         this.player = player;
@@ -37,7 +45,9 @@ export default class Controller {
 
         if (config.type === PLAYER_CONFIG.HUMAN) {
             if (this.scene.input.keyboard) {
-                this.downKey = this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.DOWN);
+                this.downKey = this.scene.input.keyboard.addKey(CONTROLLER_CONFIG.KEYS.DOWN);
+                this.leftKey = this.scene.input.keyboard.addKey(CONTROLLER_CONFIG.KEYS.LEFT);
+                this.rightKey = this.scene.input.keyboard.addKey(CONTROLLER_CONFIG.KEYS.RIGHT);
             }
             this.setupInput();
         }
@@ -45,13 +55,11 @@ export default class Controller {
 
     private setupInput() {
         if (!this.scene.input.keyboard) return;
-        this.scene.input.keyboard.on('keydown-LEFT', () => this.handleAction('left'));
-        this.scene.input.keyboard.on('keydown-RIGHT', () => this.handleAction('right'));
-        // keydown-DOWN はそのまま残すことで、押した瞬間に1マス落ちる挙動を維持
-        this.scene.input.keyboard.on('keydown-DOWN', () => this.handleAction('down'));
-        this.scene.input.keyboard.on('keydown-UP', () => this.handleAction('rotate-right'));
-        this.scene.input.keyboard.on('keydown-X', () => this.handleAction('rotate-right'));
-        this.scene.input.keyboard.on('keydown-Z', () => this.handleAction('rotate-left'));
+        
+        this.scene.input.keyboard.on(`keydown-${CONTROLLER_CONFIG.KEYS.DOWN}`, () => this.handleAction('down'));
+        this.scene.input.keyboard.on(`keydown-${CONTROLLER_CONFIG.KEYS.UP}`, () => this.handleAction('rotate-right'));
+        this.scene.input.keyboard.on(`keydown-${CONTROLLER_CONFIG.KEYS.ROTATE_RIGHT}`, () => this.handleAction('rotate-right'));
+        this.scene.input.keyboard.on(`keydown-${CONTROLLER_CONFIG.KEYS.ROTATE_LEFT}`, () => this.handleAction('rotate-left'));
     }
 
     private handleAction(action: 'left' | 'right' | 'down' | 'rotate-left' | 'rotate-right') {
@@ -59,6 +67,7 @@ export default class Controller {
 
         const oldPlace = JSON.parse(JSON.stringify(this.player.place));
         let success = false;
+        const isRotation = action.startsWith('rotate');
 
         switch (action) {
             case 'left': success = this.player.moveLeft(); break;
@@ -69,39 +78,87 @@ export default class Controller {
         }
 
         if (success) {
-            this.boardView.animateMove(oldPlace, this.player.place, this.player.moving);
+            this.boardView.animateMove(oldPlace, this.player.place, this.player.moving, isRotation);
+            
+            // 地面との接触状態をチェック
+            if (this.player.canMoveDown()) {
+                // 空中に浮いた場合、接地フラグとタイマーを解除
+                if (this.isGrounded) {
+                    this.isGrounded = false;
+                    this.cancelLockDown();
+                }
+            } else {
+                // 接地したまま移動・回転した場合
+                const isSoftDropping = this.downKey && this.downKey.isDown;
+                const duration = isSoftDropping ? CONTROLLER_CONFIG.SOFT_DROP_LOCK_DOWN_DURATION : CONTROLLER_CONFIG.LOCK_DOWN_DURATION;
+
+                // タイマーを延長（リセット）するが、着地回数(ResetCount)は増やさない
+                this.resetLockDownTimer(duration);
+                console.log(`Lockdown timer reset by action (Landing #${this.lockDownResetCount})`);
+            }
         } else if (action === 'down') {
-            this.landPuyo();
+            this.landPuyo(true); // 下入力時は余韻を入れる
         }
     }
 
-    private async landPuyo() {
+    private startLockDown(duration: number) {
+        this.cancelLockDown();
+        this.lockDownTween = this.scene.tweens.add({
+            targets: { val: 0 },
+            val: 1,
+            duration: duration,
+            onComplete: () => {
+                this.landPuyo(false);
+            }
+        });
+    }
+
+    private resetLockDownTimer(duration: number) {
+        // 現在のタイマーを止めて、同じカウントのまま再開する
+        if (this.lockDownTween) {
+            this.lockDownTween.stop();
+            this.startLockDown(duration);
+        }
+    }
+
+    private cancelLockDown() {
+        if (this.lockDownTween) {
+            this.lockDownTween.stop();
+            this.lockDownTween = null;
+        }
+    }
+
+    private async landPuyo(forceWait: boolean = false) {
         if (this.isChaining) return;
         this.isChaining = true;
+        this.cancelLockDown();
+        this.lockDownResetCount = 0;
+        this.isGrounded = false;
         
-        // 1. 盤面に固定 (この時点ではまだ浮いている)
         this.player.fixToBoard();
-        this.boardView.updateBoard(this.player.board.grid); // 浮いた状態で一度描画
+        this.boardView.updateBoard(this.player.board.grid);
         
-        // 2. 落下計算 (ロジック上の座標が更新される)
         const initialDrops = this.player.board.drop();
-        
+
+        if (forceWait && initialDrops.length == 0) {
+            await this.boardView.wait(CONTROLLER_CONFIG.SOFT_DROP_LANDING_DELAY);
+        }
+
         if (initialDrops.length > 0) {
-            // アニメーション実行 (浮いている位置から落下先へ動かす)
             await this.boardView.animateDrops(initialDrops);
+            await this.boardView.wait(CONTROLLER_CONFIG.CHIGIRI_WAIT_DURATION);
         }
         
-        // 最終的な盤面状態に同期
         this.boardView.updateBoard(this.player.board.grid);
 
-        // 3. 連鎖開始
         this.chainCount = 1;
         await this.processChain();
     }
 
     private async processChain() {
-        // 連鎖判定の前に一律で待機（設置後の余韻）
-        await this.boardView.wait(250);
+        if (this.chainCount > 1) {
+            await this.boardView.wait(CONTROLLER_CONFIG.CHAIN_STEP_WAIT_DURATION);
+        }
 
         const step = this.player.board.executeChainStep(this.chainCount);
         if (step) {
@@ -109,16 +166,17 @@ export default class Controller {
             this.scoreView.updateScore(this.player.score);
             
             await this.boardView.animateChainStep(step);
-            // 同期のために盤面を再描画
             this.boardView.updateBoard(this.player.board.grid);
             
             this.chainCount++;
             await this.processChain();
         } else {
-            // 連鎖終了
+            if (this.chainCount === 1) {
+                await this.boardView.wait(CONTROLLER_CONFIG.LANDING_WAIT_DURATION);
+            }
+
             this.isChaining = false;
             this.player.drop();
-            // 新しいぷよの出現とネクストの更新
             this.boardView.animateMove(this.player.place, this.player.place, this.player.moving);
             this.nextView.updateNext(this.player.next);
         }
@@ -126,16 +184,60 @@ export default class Controller {
 
     public update(time: number, delta: number) {
         if (this.isChaining) return;
-
         if (!delta) delta = 16; 
-        this.dropTimer += delta;
 
-        // 下キーが押されている場合は高速落下のインターバルを使用
-        const interval = (this.downKey && this.downKey.isDown) ? this.SOFT_DROP_INTERVAL : this.DROP_INTERVAL;
+        // 1. 横移動
+        this.horizontalMoveTimer += delta;
+        if (this.leftKey?.isDown) {
+            if (this.horizontalMoveTimer >= CONTROLLER_CONFIG.HORIZONTAL_MOVE_INTERVAL) {
+                this.handleAction('left');
+                this.horizontalMoveTimer = 0;
+            }
+        } else if (this.rightKey?.isDown) {
+            if (this.horizontalMoveTimer >= CONTROLLER_CONFIG.HORIZONTAL_MOVE_INTERVAL) {
+                this.handleAction('right');
+                this.horizontalMoveTimer = 0;
+            }
+        } else {
+            this.horizontalMoveTimer = CONTROLLER_CONFIG.HORIZONTAL_MOVE_INTERVAL;
+        }
 
-        if (this.dropTimer >= interval) {
-            this.handleAction('down');
+        // 2. 接地判定と自由落下
+        const canMoveDown = this.player.canMoveDown();
+        const isSoftDropping = this.downKey && this.downKey.isDown;
+
+        if (!canMoveDown) {
+            // 接地している場合
+            if (!this.isGrounded) {
+                // 「新しく接地した」ときだけカウントを増やす
+                this.isGrounded = true;
+                this.lockDownResetCount++;
+                
+                const limit = isSoftDropping ? CONTROLLER_CONFIG.SOFT_DROP_LOCK_DOWN_RESET_LIMIT : CONTROLLER_CONFIG.LOCK_DOWN_RESET_LIMIT;
+                
+                if (this.lockDownResetCount > limit) {
+                    this.landPuyo(true);
+                    return;
+                }
+
+                const duration = isSoftDropping ? CONTROLLER_CONFIG.SOFT_DROP_LOCK_DOWN_DURATION : CONTROLLER_CONFIG.LOCK_DOWN_DURATION;
+                this.startLockDown(duration);
+            }
             this.dropTimer = 0;
+        } else {
+            // 空中にいる場合
+            if (this.isGrounded) {
+                this.isGrounded = false;
+                this.cancelLockDown();
+            }
+
+            this.dropTimer += delta;
+            const interval = isSoftDropping ? CONTROLLER_CONFIG.SOFT_DROP_INTERVAL : CONTROLLER_CONFIG.DROP_INTERVAL;
+
+            if (this.dropTimer >= interval) {
+                this.handleAction('down');
+                this.dropTimer = 0;
+            }
         }
     }
 }

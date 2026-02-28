@@ -51,7 +51,7 @@ export const SCORE_CONFIG = {
     COLORS_BONUS: [0, 0, 3, 6, 12, 24],
 }
 export const SEED_CONFIG = {
-    DEFAULT_SEED: 100,
+    DEFAULT_SEED: 1100,
 }
 
 export const SCORE_PER_GARBAGE = 70;

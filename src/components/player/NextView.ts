@@ -20,11 +20,14 @@ export default class NextView {
             this.nextSprites[i] = [];
             const offset = i * 70; // 組ごとの間隔
             for (let j = 0; j < 2; j++) {
-                const sprite = scene.add.circle(0, offset + j * this.CELL_SIZE, (this.CELL_SIZE - 2) / 2, 0xffffff);
+                // j=0を下(軸)、j=1を上(子)として配置するために、表示座標の計算を反転
+                const yPos = offset + (1 - j) * this.CELL_SIZE;
+                const sprite = this.scene.add.circle(0, yPos, (this.CELL_SIZE - 2) / 2, 0xffffff);
                 this.container.add(sprite);
                 this.nextSprites[i][j] = sprite;
             }
         }
+
     }
 
     /**

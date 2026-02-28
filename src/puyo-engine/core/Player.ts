@@ -79,6 +79,16 @@ export default class Player {
         }
         return false;
     }
+    public canMoveDown(): boolean {
+        const step = 0.5;
+        let valid = true;
+        this.place.forEach((p) => {
+            if (!this.isValidPosition(p.x, p.y - step)) {
+                valid = false;
+            }
+        });
+        return valid;
+    }
     public moveLeft(): boolean {
         const step = 1;
         const newPlace: {x:number,y:number}[]=[];
@@ -180,13 +190,13 @@ export default class Player {
     
         // 3. Flip (180 deg rotation)
         if (this.lastRotation === direction) {
-            const flip_nx = p0.x - dx;
-            const flip_ny = p0.y - dy;
-            if (this.isValidPosition(flip_nx, flip_ny)) {
-                this.place[1] = { x: flip_nx, y: flip_ny };
-                this.lastRotation = 'none'; // Consume the double tap
-                return;
-            }
+            // 180度回転時は常に軸ぷよと回転ぷよの位置を入れ替える（クイックターン）
+            const temp = this.place[0];
+            this.place[0] = this.place[1];
+            this.place[1] = temp;
+
+            this.lastRotation = 'none'; // ダブルタップ判定をリセット
+            return;
         }
     
         // If all else fails, still update rotation for next attempt

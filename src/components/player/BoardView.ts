@@ -1,4 +1,5 @@
 import Phaser from "phaser";
+import { CONTROLLER_CONFIG } from "./controller-config";
 
 export default class BoardView {
     private scene: Phaser.Scene;
@@ -27,13 +28,13 @@ export default class BoardView {
             this.lineSpritesV[x] = [];
             for (let y = 0; y < this.ROWS; y++) {
                 if (x < this.COLS - 1) {
-                    const lh = scene.add.rectangle(0, 0, this.CELL_SIZE, 8, 0xffffff);
+                    const lh = scene.add.rectangle(0, 0, this.CELL_SIZE, this.CELL_SIZE/2, 0xffffff);
                     lh.setVisible(false);
                     this.container.add(lh);
                     this.lineSpritesH[x][y] = lh;
                 }
                 if (y < this.ROWS - 1) {
-                    const lv = scene.add.rectangle(0, 0, 8, this.CELL_SIZE, 0xffffff);
+                    const lv = scene.add.rectangle(0, 0, this.CELL_SIZE/2, this.CELL_SIZE, 0xffffff);
                     lv.setVisible(false);
                     this.container.add(lv);
                     this.lineSpritesV[x][y] = lv;
@@ -106,7 +107,7 @@ export default class BoardView {
         this.lineSpritesV.flat().forEach(l => l?.setVisible(false));
     }
 
-    public animateMove(oldPlace: {x:number, y:number}[], newPlace: {x:number, y:number}[], colors: number[]) {
+    public animateMove(oldPlace: {x:number, y:number}[], newPlace: {x:number, y:number}[], colors: number[], isRotation: boolean = false) {
         const colorMap = [0xff0000, 0xffff00, 0x00ff00, 0x0000ff, 0x888888, 0xffffff]; 
         
         // 値としてコピーして参照問題を完全に回避
@@ -114,29 +115,41 @@ export default class BoardView {
 
         targets.forEach((p, i) => {
             const sprite = this.puyoSprites[i];
-            const isNew = !sprite.visible;
+            const targetX = this.getPixelX(p.x);
+            const targetY = this.getPixelY(p.y);
             
             sprite.setVisible(true);
             sprite.setFillStyle(colorMap[colors[i]] || 0xffffff);
             
-            // 進行中のTweenがあれば停止
-            this.scene.tweens.killTweensOf(sprite);
+            if (isRotation) {
+                // 回転時のみアニメーションを付ける
+                this.scene.tweens.add({
+                    targets: sprite,
+                    x: targetX,
+                    y: targetY,
+                    duration: CONTROLLER_CONFIG.ROTATION_DURATION, // 設定値を使用
+                    ease: 'Cubic.out'
+                });
+            } else {
 
-            if (isNew) {
-                // 新しく出現した時（設置後など）だけ初期座標をセット
-                sprite.x = this.getPixelX(oldPlace[i].x);
-                sprite.y = this.getPixelY(oldPlace[i].y);
+                // 移動時：もし回転アニメーション中なら、そのTweenの目的地を更新する
+                const activeTweens = this.scene.tweens.getTweensOf(sprite);
+                if (activeTweens.length > 0) {
+                    activeTweens.forEach(t => {
+                        // 目的地を現在の移動先に更新し、アニメーションを継続させる
+                        (t as any).updateTo('x', targetX, true);
+                        (t as any).updateTo('y', targetY, true);
+                    });
+                } else {
+                    // アニメーション中でなければ即座に反映
+                    this.scene.tweens.killTweensOf(sprite);
+                    sprite.x = targetX;
+                    sprite.y = targetY;
+                }
             }
-
-            this.scene.tweens.add({
-                targets: sprite,
-                x: this.getPixelX(p.x),
-                y: this.getPixelY(p.y),
-                duration: 60,
-                ease: 'Power1'
-            });
         });
     }
+
 
     public updateBoard(grid: number[][]) {
         this.lastGrid = grid;
