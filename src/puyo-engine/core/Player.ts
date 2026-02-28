@@ -24,11 +24,23 @@ export default class Player {
     private attack_score: number = 0;
     private attack: number = 0;
     /**
-     * 連鎖を実行,スコアに加算,お邪魔生成,連鎖情報を返す。
+     * 連鎖を実行,スコアに加算,お邪魔数生成,連鎖情報を返す。
      */
     public getChain(): {
-        connects: {cell: number, places: {x:number, y:number}[]}[],
-        score: number,
+        cleared: {
+            cell: number;
+            places: {
+                x: number;
+                y: number;
+            }[];
+        }[];
+        drops: {
+            x: number;
+            fromY: number;
+            toY: number;
+            cell: number;
+        }[];
+        score: number;
     }[]{
         const chain = this.board.getChain();
         chain.forEach((c)=>{
@@ -43,6 +55,12 @@ export default class Player {
         this.moving = this.next.shift()!;
         this.next.push(this.queue.popQueue());
         this.place = [this.dropPlace, {x:this.dropPlace.x,y:this.dropPlace.y+1}];
+    }
+    public fixToBoard(){
+        this.place.forEach((p, i) => {
+            this.board.setPuyo(p.x, Math.floor(p.y), this.moving[i]);
+        });
+        this.moving = [];
     }
     public moveDown(): boolean{
         const step = 0.5
@@ -128,8 +146,21 @@ export default class Player {
         }
     
         // 2. Kicks
-        // 2a. Ground Kick
-        const isGroundClip = Math.floor(Math.min(ny, p0.y)) < 0 || !this.isValidPosition(nx, ny-0.5);
+        // 2a. Wall Kick (Prioritize side shift when hitting walls or puyos)
+        const preferredSx = nx > p0.x ? -1 : (nx < p0.x ? 1 : 0);
+        if (preferredSx !== 0) {
+            for (const sx of [preferredSx, -preferredSx]) {
+                if (this.isValidPosition(p0.x + sx, p0.y) && this.isValidPosition(nx + sx, ny)) {
+                    this.place[0].x += sx;
+                    this.place[1] = { x: nx + sx, y: ny };
+                    this.updateLastRotation(direction);
+                    return;
+                }
+            }
+        }
+
+        // 2b. Ground Kick (Floor kick / Upward kick as last resort)
+        const isGroundClip = Math.floor(Math.min(ny, p0.y)) < 0 || (this.isValidPosition(nx, ny) === false && ny < p0.y);
         if (isGroundClip) {
             // Try kick up 0.5
             if (this.isValidPosition(p0.x, p0.y + 0.5) && this.isValidPosition(nx, ny + 0.5)) {
@@ -145,15 +176,6 @@ export default class Player {
                 this.updateLastRotation(direction);
                 return;
             }
-        }
-    
-        // 2b. Wall Kick
-        const shiftX = direction === 'left' ? 1 : -1;
-        if (this.isValidPosition(p0.x + shiftX, p0.y) && this.isValidPosition(nx + shiftX, ny)) {
-            this.place[0].x += shiftX;
-            this.place[1] = { x: nx + shiftX, y: ny };
-            this.updateLastRotation(direction);
-            return;
         }
     
         // 3. Flip (180 deg rotation)

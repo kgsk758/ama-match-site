@@ -13,13 +13,15 @@ export default class AIMatchScene extends BaseGameScene {
   create() {
     this.cameras.main.setBackgroundColor(0x336699); // A distinct color for AI Match Scene
     this.add.text(100, 100, 'AI Match Scene', { fontSize: '32px', fill: '#fff' });
-    // Instantiate MenuContainer for visual check
-    const menuContainer = new MenuContainer(this, this.gameWidth/2, this.gameHeight/2, this.gameWidth, this.gameHeight);
-    this.add.existing(menuContainer); // Add to display list
-    const startContainer = new StartContainer(this, this.gameWidth/2, this.gameHeight/2, this.gameWidth, this.gameHeight);
-    this.add.existing(startContainer); // Add to display list
-    const readyGo = new ReadyGo(this, this.gameWidth/2, this.gameHeight/2);
 
-    const matchManager = new MatchManager(undefined, [{x:50,y:50},{x:200,y:200}],this);
+    // 盤面を先に作成（奥に表示される）
+    const matchManager = new MatchManager(undefined, [{x:50,y:100},{x:400,y:100}],this);
+
+    // メニュー類を後に作成（手前に表示される）
+    const menuContainer = new MenuContainer(this, this.gameWidth/2, this.gameHeight/2, this.gameWidth, this.gameHeight);
+    this.add.existing(menuContainer); 
+    const startContainer = new StartContainer(this, this.gameWidth/2, this.gameHeight/2, this.gameWidth, this.gameHeight);
+    this.add.existing(startContainer); 
+    const readyGo = new ReadyGo(this, this.gameWidth/2, this.gameHeight/2);
   }
 }

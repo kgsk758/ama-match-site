@@ -1,6 +1,6 @@
 // Puyopuyo/src/PuyoEngine/AI/AILogic.js
 import Puyo from '../core/Puyo.js';
-import Board from '../core/Board.js';
+import Board from '../core/board.js';
 
 
 /**

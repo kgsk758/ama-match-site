@@ -13,11 +13,11 @@ export const CELL_CONFIG = {
     ],
 
     get GARBAGE_NUM(){
-        return this.CELL_NUM_TYPES[-2];
+        return this.CELL_NUM_TYPES[this.CELL_NUM_TYPES.length - 2];
     },
 
     get NONE_NUM(){
-        return this.CELL_NUM_TYPES[-1];
+        return this.CELL_NUM_TYPES[this.CELL_NUM_TYPES.length - 1];
     }
 }
 
