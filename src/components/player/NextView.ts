@@ -3,7 +3,7 @@ import Phaser from "phaser";
 export default class NextView {
     private scene: Phaser.Scene;
     private container: Phaser.GameObjects.Container;
-    private nextSprites: Phaser.GameObjects.Rectangle[][] = [];
+    private nextSprites: Phaser.GameObjects.Arc[][] = [];
     private readonly CELL_SIZE = 24; // ネクストは少し小さめに表示
 
     constructor(scene: Phaser.Scene, x: number, y: number) {
@@ -20,7 +20,7 @@ export default class NextView {
             this.nextSprites[i] = [];
             const offset = i * 70; // 組ごとの間隔
             for (let j = 0; j < 2; j++) {
-                const sprite = scene.add.rectangle(0, offset + j * this.CELL_SIZE, this.CELL_SIZE - 2, this.CELL_SIZE - 2, 0xffffff);
+                const sprite = scene.add.circle(0, offset + j * this.CELL_SIZE, (this.CELL_SIZE - 2) / 2, 0xffffff);
                 this.container.add(sprite);
                 this.nextSprites[i][j] = sprite;
             }

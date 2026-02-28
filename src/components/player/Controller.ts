@@ -100,6 +100,9 @@ export default class Controller {
     }
 
     private async processChain() {
+        // 連鎖判定の前に一律で待機（設置後の余韻）
+        await this.boardView.wait(250);
+
         const step = this.player.board.executeChainStep(this.chainCount);
         if (step) {
             this.player.score += step.score;
