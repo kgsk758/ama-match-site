@@ -127,26 +127,30 @@ export default class BoardView {
             
             if (isRotation) {
                 // 回転時のみアニメーションを付ける
-                this.scene.tweens.add({
+                const tween = this.scene.tweens.add({
                     targets: sprite,
                     x: targetX,
                     y: targetY,
                     duration: CONTROLLER_CONFIG.ROTATION_DURATION, // 設定値を使用
                     ease: 'Cubic.out'
                 });
+                // 【修正点】回転Tweenであることを識別するためのフラグを付与
+                (tween as any).isRotationTween = true;
             } else {
 
                 // 移動時：もし回転アニメーション中なら、そのTweenの目的地を更新する
                 const activeTweens = this.scene.tweens.getTweensOf(sprite);
-                if (activeTweens.length > 0) {
-                    activeTweens.forEach(t => {
+                // 【修正点】回転Tweenのみを抽出する
+                const rotationTweens = activeTweens.filter(t => (t as any).isRotationTween);
+                if (rotationTweens.length > 0) {
+                    rotationTweens.forEach(t => {
                         // 目的地を現在の移動先に更新し、アニメーションを継続させる
                         (t as any).updateTo('x', targetX, true);
                         (t as any).updateTo('y', targetY, true);
                     });
                 } else {
                     // アニメーション中でなければ即座に反映
-                    this.scene.tweens.killTweensOf(sprite);
+                    //this.scene.tweens.killTweensOf(sprite);
                     sprite.x = targetX;
                     sprite.y = targetY;
                 }
@@ -176,6 +180,45 @@ export default class BoardView {
         });
 
         this.updateConnections(grid);
+    }
+
+    public async animateLandingBounce(places: {x: number, y: number}[], indices: number[] = [0, 1]): Promise<void> {
+        const targets: Phaser.GameObjects.Arc[] = [];
+        const useAll = indices.length === 0;
+
+        // 操作中ぷよのチェック (indicesで指定されたもののみ)
+        if (!useAll) {
+            indices.forEach(i => {
+                const sprite = this.puyoSprites[i];
+                if (sprite && sprite.visible) targets.push(sprite);
+            });
+        }
+
+        // 盤面ぷよのチェック (indicesで指定された座標のみ)
+        places.forEach((p, idx) => {
+            if (!useAll && !indices.includes(idx)) return;
+            const sprite = this.boardSprites[p.x][Math.floor(p.y)];
+            if (sprite && sprite.visible && !targets.includes(sprite)) {
+                targets.push(sprite);
+            }
+        });
+
+        if (targets.length === 0) return;
+
+        return new Promise((resolve) => {
+            this.scene.tweens.add({
+                targets: targets,
+                scaleY: 0.8,
+                scaleX: 1.2,
+                duration: 40,
+                yoyo: true,
+                ease: 'Quad.easeOut',
+                onComplete: () => {
+                    targets.forEach(t => t.setScale(1));
+                    resolve();
+                }
+            });
+        });
     }
 
     public async animateDrops(drops: {x:number, fromY:number, toY:number, cell:number}[]): Promise<void> {
@@ -213,12 +256,14 @@ export default class BoardView {
                 this.scene.tweens.add({
                     targets: sprite,
                     y: this.getPixelY(d.toY),
-                    duration: distance * 40 + 60, // 1マスあたり40ms + 基本時間60ms
-                    ease: 'Power1',
+                    duration: distance * 40 + 100, // 1マスあたり40ms + 基本時間100ms
+                    ease: 'Power2.easeIn',
                     onComplete: () => {
                         completed++;
                         if (completed === sortedDrops.length) {
-                            resolve();
+                            // すべての落下が完了したら、着地したぷよをバウンドさせる
+                            const landingPlaces = sortedDrops.map(sd => ({ x: sd.x, y: sd.toY }));
+                            this.animateLandingBounce(landingPlaces, []).then(() => resolve());
                         }
                     }
                 });
@@ -237,6 +282,9 @@ export default class BoardView {
         });
     }
 
+    public async animateBounce(){
+
+    }
     public async animateChainStep(step: any): Promise<void> {
         return new Promise((resolve) => {
             const blinkTargets: (Phaser.GameObjects.Arc | Phaser.GameObjects.Rectangle)[] = [];

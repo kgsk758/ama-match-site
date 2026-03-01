@@ -44,6 +44,13 @@ export default class Controller {
         this.boardView.getContainer().addAt(this.acView.text, 1);
 
         this.player.drop();
+        // 初期状態の接地チェック
+        this.isGrounded = !this.player.canMoveDown();
+        if (this.isGrounded) {
+            this.startLockDown(CONTROLLER_CONFIG.LOCK_DOWN_DURATION);
+            this.triggerLandingBounce();
+        }
+        
         this.boardView.animateMove(this.player.place, this.player.place, this.player.moving);
         this.nextView.updateNext(this.player.next);
 
@@ -90,14 +97,31 @@ export default class Controller {
                 if (this.isGrounded) {
                     this.isGrounded = false;
                     this.cancelLockDown();
+                    // ここではカウントを増やさない（空中での強制設置を防ぐ）
                 }
             } else {
-                // 接地したまま移動・回転した場合
-                // タイマーを延長（リセット）するが、着地回数(ResetCount)は増やさない
-                this.resetLockDownTimer(CONTROLLER_CONFIG.LOCK_DOWN_DURATION);
-                console.log(`Lockdown timer reset by action (Landing #${this.lockDownResetCount})`);
-                if (action === 'down' && this.downKey && this.downKey.isDown) {
+                // 接地した、あるいは接地したままアクションした場合はカウントを増やす
+                this.lockDownResetCount++;
+
+                if (this.lockDownResetCount > CONTROLLER_CONFIG.LOCK_DOWN_RESET_LIMIT) {
                     this.landPuyo();
+                    return;
+                }
+
+                if (!this.isGrounded) {
+                    // 【空中から接地した瞬間】
+                    this.isGrounded = true;
+                    this.startLockDown(CONTROLLER_CONFIG.LOCK_DOWN_DURATION);
+                    this.triggerLandingBounce();
+                } else {
+                    // 【すでに接地している状態で移動・回転した時】
+                    this.resetLockDownTimer(CONTROLLER_CONFIG.LOCK_DOWN_DURATION);
+                    // 接地中の移動・回転でも少しバウンスさせて手応えを出す
+                    this.triggerLandingBounce();
+                }
+
+                if (action === 'down' && this.downKey && this.downKey.isDown) {
+                    this.landPuyo(true);
                     console.log('immediate landing')
                 }
             }
@@ -131,15 +155,38 @@ export default class Controller {
         }
     }
 
-    private async landPuyo() {
+    private async landPuyo(softDrop: boolean = false) {
         if (this.isChaining) return;
         this.isChaining = true;
         this.cancelLockDown();
         this.lockDownResetCount = 0;
         this.isGrounded = false;
         
+        // 【重要】盤面に固定する前に、現在の位置から接地しているぷよを特定する
+        const landingPlaces = JSON.parse(JSON.stringify(this.player.place));
+        const isDirectlyGrounded = this.player.place.map((p) => !this.player.isValidPosition(p.x, p.y - 0.5));
+        const groundedIndices: number[] = [];
+        isDirectlyGrounded.forEach((isGrounded, i) => {
+            if (isGrounded) {
+                groundedIndices.push(i);
+            } else {
+                const other = 1 - i;
+                if (isDirectlyGrounded[other] && 
+                    this.player.place[i].x === this.player.place[other].x && 
+                    this.player.place[i].y > this.player.place[other].y) {
+                    groundedIndices.push(i);
+                }
+            }
+        });
+
+        // 盤面を更新
         this.player.fixToBoard();
         this.boardView.updateBoard(this.player.board.grid);
+        
+        if(softDrop && groundedIndices.length > 0){
+            // 盤面更新後に、特定したインデックスに対してバウンドを実行
+            this.boardView.animateLandingBounce(landingPlaces, groundedIndices);
+        }
         
         const initialDrops = this.player.board.drop();
 
@@ -196,6 +243,30 @@ export default class Controller {
         }
     }
 
+    private triggerLandingBounce() {
+        // 読み取り専用で座標を渡し、BoardView側で処理させる（ディープコピーを避ける）
+        const landingPlaces = this.player.place;
+        const isDirectlyGrounded = landingPlaces.map((p) => !this.player.isValidPosition(p.x, p.y - 0.5));
+        const groundedIndices: number[] = [];
+        
+        isDirectlyGrounded.forEach((isGrounded, i) => {
+            if (isGrounded) {
+                groundedIndices.push(i);
+            } else {
+                const other = 1 - i;
+                if (isDirectlyGrounded[other] && 
+                    landingPlaces[i].x === landingPlaces[other].x && 
+                    landingPlaces[i].y > landingPlaces[other].y) {
+                    groundedIndices.push(i);
+                }
+            }
+        });
+        
+        if (groundedIndices.length > 0) {
+            this.boardView.animateLandingBounce(landingPlaces, groundedIndices);
+        }
+    }
+
     public update(time: number, delta: number) {
         if (this.isChaining) return;
         if (!delta) delta = 16; 
@@ -217,35 +288,14 @@ export default class Controller {
         }
 
         // 2. 接地判定と自由落下
-        const canMoveDown = this.player.canMoveDown();
-        const isSoftDropping = this.downKey && this.downKey.isDown;
-
-        if (!canMoveDown) {
-            // 接地している場合
-            if (!this.isGrounded) {
-                // 「新しく接地した」ときだけカウントを増やす
-                this.isGrounded = true;
-                this.lockDownResetCount++;
-                
-                const limit = CONTROLLER_CONFIG.LOCK_DOWN_RESET_LIMIT;
-                
-                if (this.lockDownResetCount > limit) {
-                    this.landPuyo();
-                    return;
-                }
-
-                const duration = CONTROLLER_CONFIG.LOCK_DOWN_DURATION;
-                this.startLockDown(duration);
-            }
+        // 毎フレームの canMoveDown() チェックを廃止し、キャッシュされた isGrounded を使用
+        if (this.isGrounded) {
             this.dropTimer = 0;
+            // 接地中の追加処理（ロックダウン等）は handleAction と Tweens で管理されているため
+            // ここでの毎フレーム計算は不要
         } else {
-            // 空中にいる場合
-            if (this.isGrounded) {
-                this.isGrounded = false;
-                this.cancelLockDown();
-            }
-
             this.dropTimer += delta;
+            const isSoftDropping = this.downKey && this.downKey.isDown;
             const interval = isSoftDropping ? CONTROLLER_CONFIG.SOFT_DROP_INTERVAL : CONTROLLER_CONFIG.DROP_INTERVAL;
 
             if (this.dropTimer >= interval) {

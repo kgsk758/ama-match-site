@@ -242,13 +242,18 @@ export default class Player {
         this.updateLastRotation(direction);
     }
 
-    private isValidPosition(x: number, y: number): boolean {
-        // ぷよが占有する可能性のあるすべての格子点をチェック
-        for (let ix = Math.floor(x); ix <= Math.ceil(x); ix++) {
-            for (let iy = Math.floor(y); iy <= Math.ceil(y); iy++) {
-                if (!this.board.isValid(ix, iy)) return false;
-            }
+    public isValidPosition(x: number, y: number): boolean {
+        const ix = Math.floor(x);
+        const iy = Math.floor(y);
+        
+        // 軸となるセルをチェック
+        if (!this.board.isValid(ix, iy)) return false;
+        
+        // yが整数でない（.5など）場合、上のセルもチェック（ぷよが2つのセルに跨っているため）
+        if (y !== iy) {
+            if (!this.board.isValid(ix, iy + 1)) return false;
         }
+        
         return true;
     }
 }
