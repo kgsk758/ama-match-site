@@ -88,7 +88,8 @@ export default class Player {
     public drop(){
         this.moving = this.next.shift()!;
         this.next.push(this.queue.popQueue());
-        this.place = [this.dropPlace, {x:this.dropPlace.x,y:this.dropPlace.y+1}];
+        this.place = [{x: this.dropPlace.x, y: this.dropPlace.y}, {x:this.dropPlace.x,y:this.dropPlace.y+1}];
+        this.lastRotation = 'none';
     }
     public fixToBoard(){
         this.place.forEach((p, i) => {
@@ -215,6 +216,8 @@ export default class Player {
             }
             // Try kick up 1.0 
             if (this.isValidPosition(p0.x, p0.y + 1) && this.isValidPosition(nx, ny + 1)) {
+                //14段目に軸ぷよが行くなら却下
+                if(p0.y + 1 === this.board.rows - 1) return; 
                 this.place[0].y += 1;
                 this.place[1] = { x: nx, y: ny + 1 };
                 this.updateLastRotation(direction);
@@ -224,6 +227,8 @@ export default class Player {
     
         // 3. Flip (180 deg rotation)
         if (this.lastRotation === direction) {
+            //縦回転じゃないときは却下
+            if(this.place[0].x !== this.place[1].x) return;
             // 180度回転時は常に軸ぷよと回転ぷよの位置を入れ替える（クイックターン）
             const temp = this.place[0];
             this.place[0] = this.place[1];

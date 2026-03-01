@@ -81,7 +81,7 @@ export default class Controller {
             case 'rotate-right': this.player.rotateRight(); success = true; break;
         }
 
-        if (success) {
+        //if (success) {
             this.boardView.animateMove(oldPlace, this.player.place, this.player.moving, isRotation);
             
             // 地面との接触状態をチェック
@@ -93,16 +93,15 @@ export default class Controller {
                 }
             } else {
                 // 接地したまま移動・回転した場合
-                const isSoftDropping = this.downKey && this.downKey.isDown;
-                const duration = isSoftDropping ? CONTROLLER_CONFIG.SOFT_DROP_LOCK_DOWN_DURATION : CONTROLLER_CONFIG.LOCK_DOWN_DURATION;
-
                 // タイマーを延長（リセット）するが、着地回数(ResetCount)は増やさない
-                this.resetLockDownTimer(duration);
+                this.resetLockDownTimer(CONTROLLER_CONFIG.LOCK_DOWN_DURATION);
                 console.log(`Lockdown timer reset by action (Landing #${this.lockDownResetCount})`);
+                if (action === 'down' && this.downKey && this.downKey.isDown) {
+                    this.landPuyo();
+                    console.log('immediate landing')
+                }
             }
-        } else if (action === 'down') {
-            this.landPuyo(true); // 下入力時は余韻を入れる
-        }
+        //}
     }
 
     private startLockDown(duration: number) {
@@ -112,7 +111,7 @@ export default class Controller {
             val: 1,
             duration: duration,
             onComplete: () => {
-                this.landPuyo(false);
+                this.landPuyo();
             }
         });
     }
@@ -132,7 +131,7 @@ export default class Controller {
         }
     }
 
-    private async landPuyo(forceWait: boolean = false) {
+    private async landPuyo() {
         if (this.isChaining) return;
         this.isChaining = true;
         this.cancelLockDown();
@@ -144,14 +143,17 @@ export default class Controller {
         
         const initialDrops = this.player.board.drop();
 
-        if (forceWait && initialDrops.length == 0) {
+        /*
+        if (forceWait && initialDrops.length == 0) { //高速落下かつちぎりなし
             await this.boardView.wait(CONTROLLER_CONFIG.SOFT_DROP_LANDING_DELAY);
         }
+        */
 
         if (initialDrops.length > 0) {
             await this.boardView.animateDrops(initialDrops);
-            await this.boardView.wait(CONTROLLER_CONFIG.CHIGIRI_WAIT_DURATION);
+            //await this.boardView.wait(CONTROLLER_CONFIG.CHIGIRI_WAIT_DURATION);
         }
+        await this.boardView.wait(CONTROLLER_CONFIG.WAIT_DURAION);
         
         this.boardView.updateBoard(this.player.board.grid);
 
@@ -160,9 +162,11 @@ export default class Controller {
     }
 
     private async processChain() {
+        /*
         if (this.chainCount > 1) {
             await this.boardView.wait(CONTROLLER_CONFIG.CHAIN_STEP_WAIT_DURATION);
         }
+        */
 
         const step = this.player.executeChainStep(this.chainCount);
         if (step) {
@@ -173,11 +177,14 @@ export default class Controller {
             this.boardView.updateBoard(this.player.board.grid);
             
             this.chainCount++;
+            await this.boardView.wait(CONTROLLER_CONFIG.WAIT_DURAION);
             await this.processChain();
         } else {
+            /*
             if (this.chainCount === 1) {
                 await this.boardView.wait(CONTROLLER_CONFIG.LANDING_WAIT_DURATION);
             }
+            */
 
             this.player.checkAllClear();
             this.acView.update(this.player.allClear);
@@ -220,14 +227,14 @@ export default class Controller {
                 this.isGrounded = true;
                 this.lockDownResetCount++;
                 
-                const limit = isSoftDropping ? CONTROLLER_CONFIG.SOFT_DROP_LOCK_DOWN_RESET_LIMIT : CONTROLLER_CONFIG.LOCK_DOWN_RESET_LIMIT;
+                const limit = CONTROLLER_CONFIG.LOCK_DOWN_RESET_LIMIT;
                 
                 if (this.lockDownResetCount > limit) {
-                    this.landPuyo(true);
+                    this.landPuyo();
                     return;
                 }
 
-                const duration = isSoftDropping ? CONTROLLER_CONFIG.SOFT_DROP_LOCK_DOWN_DURATION : CONTROLLER_CONFIG.LOCK_DOWN_DURATION;
+                const duration = CONTROLLER_CONFIG.LOCK_DOWN_DURATION;
                 this.startLockDown(duration);
             }
             this.dropTimer = 0;

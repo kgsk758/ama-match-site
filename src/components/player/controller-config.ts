@@ -13,9 +13,8 @@ export const CONTROLLER_CONFIG = {
     CHAIN_STEP_WAIT_DURATION: 250,
     LOCK_DOWN_DURATION: 500, // 接地してから設置されるまでの猶予
     LOCK_DOWN_RESET_LIMIT: 8, // 移動・回転でタイマーをリセットできる回数
-    SOFT_DROP_LOCK_DOWN_DURATION: 150, // 下入力時の設置猶予 (ms)
-    SOFT_DROP_LOCK_DOWN_RESET_LIMIT: 4, // 下入力時のリセット上限
-    SOFT_DROP_LANDING_DELAY: 350, // 下入力で即座に設置した時の余韻 (ms)
+    SOFT_DROP_LANDING_DELAY: 250, // 下入力で即座に設置した時の余韻 (ms)
+    WAIT_DURAION: 400, //ステップごとの待機(連鎖のステップや次のツモまでの待機)
 
 
     // キー設定
