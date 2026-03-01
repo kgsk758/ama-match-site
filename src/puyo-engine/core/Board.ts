@@ -156,4 +156,13 @@ export default class Board {
         }
         return garbage;
     }
+
+    public isEmpty(): boolean {
+        for (let x = 0; x < this.columns; x++) {
+            for (let y = 0; y < this.rows; y++) {
+                if (this.grid[x][y] !== CELL_CONFIG.NONE_NUM) return false;
+            }
+        }
+        return true;
+    }
 }

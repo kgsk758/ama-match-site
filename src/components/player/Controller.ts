@@ -4,6 +4,7 @@ import BoardView from "./BoardView";
 import GarbageView from "./GarbageView";
 import ScoreView from "./ScoreView";
 import NextView from "./NextView";
+import ACView from "./ACView";
 import { PLAYER_CONFIG } from "../../constants";
 import { CONTROLLER_CONFIG } from "./controller-config";
 
@@ -14,6 +15,7 @@ export default class Controller {
     private garbageView: GarbageView;
     private scoreView: ScoreView;
     private nextView: NextView;
+    private acView: ACView;
 
     private dropTimer: number = 0;
     private horizontalMoveTimer: number = 0;
@@ -38,6 +40,8 @@ export default class Controller {
         this.garbageView = new GarbageView(scene, place.x, place.y);
         this.scoreView = new ScoreView(scene, place.x, place.y);
         this.nextView = new NextView(scene, place.x, place.y);
+        this.acView = new ACView(scene);
+        this.boardView.getContainer().addAt(this.acView.text, 1);
 
         this.player.drop();
         this.boardView.animateMove(this.player.place, this.player.place, this.player.moving);
@@ -160,10 +164,10 @@ export default class Controller {
             await this.boardView.wait(CONTROLLER_CONFIG.CHAIN_STEP_WAIT_DURATION);
         }
 
-        const step = this.player.board.executeChainStep(this.chainCount);
+        const step = this.player.executeChainStep(this.chainCount);
         if (step) {
-            this.player.score += step.score;
             this.scoreView.updateScore(this.player.score);
+            this.acView.update(this.player.allClear);
             
             await this.boardView.animateChainStep(step);
             this.boardView.updateBoard(this.player.board.grid);
@@ -174,6 +178,9 @@ export default class Controller {
             if (this.chainCount === 1) {
                 await this.boardView.wait(CONTROLLER_CONFIG.LANDING_WAIT_DURATION);
             }
+
+            this.player.checkAllClear();
+            this.acView.update(this.player.allClear);
 
             this.isChaining = false;
             this.player.drop();

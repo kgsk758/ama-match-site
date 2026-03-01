@@ -11,11 +11,11 @@ export const CONTROLLER_CONFIG = {
     LANDING_WAIT_DURATION: 250,
     CHIGIRI_WAIT_DURATION: 250,
     CHAIN_STEP_WAIT_DURATION: 250,
-    LOCK_DOWN_DURATION: 250, // 接地してから設置されるまでの猶予
+    LOCK_DOWN_DURATION: 500, // 接地してから設置されるまでの猶予
     LOCK_DOWN_RESET_LIMIT: 8, // 移動・回転でタイマーをリセットできる回数
-    SOFT_DROP_LOCK_DOWN_DURATION: 125, // 下入力時の設置猶予 (ms)
+    SOFT_DROP_LOCK_DOWN_DURATION: 150, // 下入力時の設置猶予 (ms)
     SOFT_DROP_LOCK_DOWN_RESET_LIMIT: 4, // 下入力時のリセット上限
-    SOFT_DROP_LANDING_DELAY: 125, // 下入力で即座に設置した時の余韻 (ms)
+    SOFT_DROP_LANDING_DELAY: 350, // 下入力で即座に設置した時の余韻 (ms)
 
 
     // キー設定

@@ -1,6 +1,6 @@
 import Board from "./Board";
 import Queue from "./Queue";
-import { SEED_CONFIG, SCORE_PER_GARBAGE } from "./core-config";
+import { SEED_CONFIG, SCORE_PER_GARBAGE, SCORE_CONFIG } from "./core-config";
 export default class Player {
     public board: Board;
     public moving: number[];
@@ -43,14 +43,48 @@ export default class Player {
         score: number;
     }[]{
         const chain = this.board.getChain();
+
+        if (this.allClear && chain.length > 0) {
+            chain[0].score += SCORE_CONFIG.ALL_CLEAR_BONUS;
+            this.allClear = false;
+        }
+
         chain.forEach((c)=>{
             this.score += c.score;
             this.attack_score += c.score;
         })
+
+        if (this.board.isEmpty()) {
+            this.allClear = true;
+        }
+
         this.attack += Math.floor(this.attack_score / SCORE_PER_GARBAGE);
         this.attack_score = this.attack_score % SCORE_PER_GARBAGE;
         return chain;
     }
+
+    public executeChainStep(chainCount: number) {
+        const step = this.board.executeChainStep(chainCount);
+        if (step) {
+            if (this.allClear && chainCount === 1) {
+                step.score += SCORE_CONFIG.ALL_CLEAR_BONUS;
+                this.allClear = false;
+            }
+            this.score += step.score;
+            this.attack_score += step.score;
+            this.attack += Math.floor(this.attack_score / SCORE_PER_GARBAGE);
+            this.attack_score = this.attack_score % SCORE_PER_GARBAGE;
+        }
+        return step;
+    }
+
+    public checkAllClear(): boolean {
+        if (this.board.isEmpty()) {
+            this.allClear = true;
+        }
+        return this.allClear;
+    }
+
     public drop(){
         this.moving = this.next.shift()!;
         this.next.push(this.queue.popQueue());

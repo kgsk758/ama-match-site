@@ -62,6 +62,10 @@ export default class BoardView {
         }
     }
 
+    public getContainer(): Phaser.GameObjects.Container {
+        return this.container;
+    }
+
     private getPixelX(x: number) { return x * this.CELL_SIZE + this.CELL_SIZE / 2; }
     private getPixelY(y: number) { return (12 - y) * this.CELL_SIZE - this.CELL_SIZE / 2; }
 
