@@ -1,346 +1,333 @@
 import Phaser from "phaser";
-import { CONTROLLER_CONFIG } from "./controller-config";
 
 export default class BoardView {
-    private scene: Phaser.Scene;
-    private container: Phaser.GameObjects.Container;
-    private puyoSprites: Phaser.GameObjects.Arc[] = []; 
-    private boardSprites: Phaser.GameObjects.Arc[][] = []; // 盤面に固定されたぷよ
-    private lineSpritesH: Phaser.GameObjects.Rectangle[][] = []; // 繋ぎ目（横）
-    private lineSpritesV: Phaser.GameObjects.Rectangle[][] = []; // 繋ぎ目（縦）
+    // --- Constants ---
     private readonly CELL_SIZE = 32;
     private readonly COLS = 6;
     private readonly ROWS = 14;
+    private readonly COLOR_MAP = [0xff0000, 0xffff00, 0x00ff00, 0x0000ff, 0x888888, 0xffffff];
+    private readonly ROTATION_DURATION = 100; // ms for rotation animation
 
-    private lastGrid: number[][] = [];
+    // --- Components ---
+    private scene: Phaser.Scene;
+    private container: Phaser.GameObjects.Container;
+    private puyoSprites: Phaser.GameObjects.Arc[] = []; 
+    private boardSprites: Phaser.GameObjects.Arc[][] = [];
+    private movingPuyo: {axis:{x:number,y:number}, angle: number} = {axis:{x:0,y:0},angle:90};
 
     constructor(scene: Phaser.Scene, x: number, y: number) {
         this.scene = scene;
         this.container = scene.add.container(x, y);
 
-        const bg = scene.add.rectangle(0, 0, this.CELL_SIZE * this.COLS, this.CELL_SIZE * 12, 0x000000, 0.5);
+        this.initBackground();
+        this.initPuyoSprites();
+    }
+
+    // --- Initialization ---
+
+    private initBackground() {
+        const bg = this.scene.add.rectangle(0, 0, this.CELL_SIZE * this.COLS, this.CELL_SIZE * 12, 0x000000, 0.5);
         bg.setOrigin(0, 0);
         this.container.add(bg);
+    }
 
-        // 繋ぎ目スプライトの初期化 (Puyoより先に作成して背面に持っていく)
-        for (let x = 0; x < this.COLS; x++) {
-            this.lineSpritesH[x] = [];
-            this.lineSpritesV[x] = [];
-            for (let y = 0; y < this.ROWS; y++) {
-                if (x < this.COLS - 1) {
-                    const lh = scene.add.rectangle(0, 0, this.CELL_SIZE, this.CELL_SIZE/2, 0xffffff);
-                    lh.setVisible(false);
-                    this.container.add(lh);
-                    this.lineSpritesH[x][y] = lh;
-                }
-                if (y < this.ROWS - 1) {
-                    const lv = scene.add.rectangle(0, 0, this.CELL_SIZE/2, this.CELL_SIZE, 0xffffff);
-                    lv.setVisible(false);
-                    this.container.add(lv);
-                    this.lineSpritesV[x][y] = lv;
-                }
-            }
-        }
+    public initMovingPuyo(movingPuyo:{
+        x: number;
+        y: number;
+        color: number;
+    }[]){
+        if (!movingPuyo || movingPuyo.length < 2) return;
+        const clone = structuredClone(movingPuyo);
+        const axisPos = {x: clone[0].x, y:clone[0].y};
+        const angle = this._calculateAngle(clone[0], clone[1]);
+        this.movingPuyo = {axis: axisPos, angle: angle};
+        this.setSpritePos(this.movingPuyo);
+    }
 
+    private initPuyoSprites() {
         // 操作中ぷよ
         for (let i = 0; i < 2; i++) {
-            const sprite = scene.add.circle(0, 0, (this.CELL_SIZE - 4) / 2, 0xffffff);
-            sprite.setVisible(false);
+            const sprite = this.scene.add.circle(0, 0, (this.CELL_SIZE - 4) / 2, 0xffffff).setVisible(false);
             this.container.add(sprite);
             this.puyoSprites.push(sprite);
         }
 
-        // 盤面用スプライト配列の初期化
+        // 盤面固定ぷよ
         for (let x = 0; x < this.COLS; x++) {
             this.boardSprites[x] = [];
             for (let y = 0; y < this.ROWS; y++) {
-                const sprite = scene.add.circle(0, 0, (this.CELL_SIZE - 4) / 2, 0xffffff);
-                sprite.setVisible(false);
+                const sprite = this.scene.add.circle(0, 0, (this.CELL_SIZE - 4) / 2, 0xffffff).setVisible(false);
                 this.container.add(sprite);
                 this.boardSprites[x][y] = sprite;
             }
         }
     }
 
-    public getContainer(): Phaser.GameObjects.Container {
-        return this.container;
+    // --- Public API ---
+
+    public getContainer() { return this.container; }
+
+    public moveAxis(movingPuyos: {x: number, y: number, color: number}[]){
+        if (!movingPuyos || movingPuyos.length === 0) return;
+        const newX = movingPuyos[0]?.x;
+        const newY = movingPuyos[0]?.y;
+        this.movingPuyo.axis = {x:newX,y:newY};
+        this.setSpritePos(this.movingPuyo);
     }
 
-    private getPixelX(x: number) { return x * this.CELL_SIZE + this.CELL_SIZE / 2; }
-    private getPixelY(y: number) { return (12 - y) * this.CELL_SIZE - this.CELL_SIZE / 2; }
-
-    private updateConnections(grid: number[][]) {
-        const colorMap = [0xff0000, 0xffff00, 0x00ff00, 0x0000ff, 0x888888, 0xffffff];
-        
-        for (let x = 0; x < this.COLS; x++) {
-            for (let y = 0; y < this.ROWS; y++) {
-                const cell = grid[x][y];
-                const isPuyo = cell < 4; // 0-3: 正常なぷよ
-
-                // 右隣
-                if (x < this.COLS - 1) {
-                    const line = this.lineSpritesH[x][y];
-                    if (isPuyo && grid[x + 1][y] === cell) {
-                        line.setVisible(true);
-                        line.setFillStyle(colorMap[cell]);
-                        line.x = (this.getPixelX(x) + this.getPixelX(x + 1)) / 2;
-                        line.y = this.getPixelY(y);
-                    } else {
-                        line.setVisible(false);
-                    }
-                }
-
-                // 上隣
-                if (y < this.ROWS - 1) {
-                    const line = this.lineSpritesV[x][y];
-                    if (isPuyo && grid[x][y + 1] === cell) {
-                        line.setVisible(true);
-                        line.setFillStyle(colorMap[cell]);
-                        line.x = this.getPixelX(x);
-                        line.y = (this.getPixelY(y) + this.getPixelY(y + 1)) / 2;
-                    } else {
-                        line.setVisible(false);
-                    }
-                }
-            }
-        }
+    public rotateRight(
+        before:{x:number,y:number,color?:number;}[],
+        after:{x:number,y:number,color?:number;}[]
+    ): Promise<void> | undefined {
+        const angles = this.getAngle(before, after);
+        this.movingPuyo.axis = {x:after[0].x,y:after[0].y}; //壁キック用に座標は瞬時に変える
+        const rotation=(angles.after-angles.before<0)?angles.after-angles.before:angles.after-angles.before-360;
+        if(rotation % 360 == 0) return; 
+        return this.doRotationTweens(rotation, angles);
     }
 
-    private hideAllConnections() {
-        this.lineSpritesH.flat().forEach(l => l?.setVisible(false));
-        this.lineSpritesV.flat().forEach(l => l?.setVisible(false));
+    public rotateLeft(
+        before:{x:number,y:number,color?:number;}[],
+        after:{x:number,y:number,color?:number;}[]
+    ): Promise<void> | undefined {
+        const angles = this.getAngle(before, after);
+        this.movingPuyo.axis = {x:after[0].x,y:after[0].y}; //壁キック用に座標は瞬時に変える
+        const rotation=(angles.after-angles.before>0)?angles.after-angles.before:angles.after-angles.before+360;
+        if(rotation % 360 == 0) return; 
+        return this.doRotationTweens(rotation, angles);
     }
 
-    public animateMove(oldPlace: {x:number, y:number}[], newPlace: {x:number, y:number}[], colors: number[], isRotation: boolean = false) {
-        const colorMap = [0xff0000, 0xffff00, 0x00ff00, 0x0000ff, 0x888888, 0xffffff]; 
-        
-        // 値としてコピーして参照問題を完全に回避
-        const targets = newPlace.map(p => ({ x: p.x, y: p.y }));
-
-        targets.forEach((p, i) => {
-            const sprite = this.puyoSprites[i];
-            const targetX = this.getPixelX(p.x);
-            const targetY = this.getPixelY(p.y);
-            
-            sprite.setVisible(true);
-            sprite.setFillStyle(colorMap[colors[i]] || 0xffffff);
-            
-            if (isRotation) {
-                // 回転時のみアニメーションを付ける
-                const tween = this.scene.tweens.add({
-                    targets: sprite,
-                    x: targetX,
-                    y: targetY,
-                    duration: CONTROLLER_CONFIG.ROTATION_DURATION, // 設定値を使用
-                    ease: 'Cubic.out'
-                });
-                // 【修正点】回転Tweenであることを識別するためのフラグを付与
-                (tween as any).isRotationTween = true;
-            } else {
-
-                // 移動時：もし回転アニメーション中なら、そのTweenの目的地を更新する
-                const activeTweens = this.scene.tweens.getTweensOf(sprite);
-                // 【修正点】回転Tweenのみを抽出する
-                const rotationTweens = activeTweens.filter(t => (t as any).isRotationTween);
-                if (rotationTweens.length > 0) {
-                    rotationTweens.forEach(t => {
-                        // 目的地を現在の移動先に更新し、アニメーションを継続させる
-                        (t as any).updateTo('x', targetX, true);
-                        (t as any).updateTo('y', targetY, true);
-                    });
-                } else {
-                    // アニメーション中でなければ即座に反映
-                    //this.scene.tweens.killTweensOf(sprite);
-                    sprite.x = targetX;
-                    sprite.y = targetY;
-                }
-            }
-        });
-    }
-
-
-    public updateBoard(grid: number[][]) {
-        this.lastGrid = grid;
-        const colorMap = [0xff0000, 0xffff00, 0x00ff00, 0x0000ff, 0x888888, 0xffffff];
-        this.puyoSprites.forEach(s => s.setVisible(false));
-
+    /**
+     * 盤面と操作中ぷよの状態を一括更新する
+     */
+    public render(grid: number[][], movingPuyos?: {x: number, y: number, color: number}[]) {
+        // 盤面の更新
         grid.forEach((col, x) => {
             col.forEach((cell, y) => {
                 const sprite = this.boardSprites[x][y];
                 if (cell < 5) {
-                    sprite.setVisible(true);
-                    sprite.setFillStyle(colorMap[cell]);
-                    sprite.x = this.getPixelX(x);
-                    sprite.y = this.getPixelY(y);
-                    sprite.setAlpha(1);
+                    sprite.setVisible(true)
+                          .setFillStyle(this.COLOR_MAP[cell])
+                          .setAlpha(1)
+                          .setScale(1)
+                          .setPosition(this.getPixelX(x), this.getPixelY(y));
                 } else {
                     sprite.setVisible(false);
                 }
             });
         });
 
-        this.updateConnections(grid);
-    }
-
-    public async animateLandingBounce(places: {x: number, y: number}[], indices: number[] = [0, 1]): Promise<void> {
-        const targets: Phaser.GameObjects.Arc[] = [];
-        const useAll = indices.length === 0;
-
-        // 操作中ぷよのチェック (indicesで指定されたもののみ)
-        if (!useAll) {
-            indices.forEach(i => {
-                const sprite = this.puyoSprites[i];
-                if (sprite && sprite.visible) targets.push(sprite);
+        this.puyoSprites.forEach(s => s.setVisible(false));
+        if (movingPuyos) {
+            movingPuyos.forEach((p, i) => {
+                if (this.puyoSprites[i]) {
+                    this.puyoSprites[i].setVisible(true)
+                        .setFillStyle(this.COLOR_MAP[p.color])
+                        .setPosition(this.getPixelX(p.x), this.getPixelY(p.y));
+                }
             });
         }
+    }
 
-        // 盤面ぷよのチェック (indicesで指定された座標のみ)
-        places.forEach((p, idx) => {
-            if (!useAll && !indices.includes(idx)) return;
-            const sprite = this.boardSprites[p.x][Math.floor(p.y)];
-            if (sprite && sprite.visible && !targets.includes(sprite)) {
-                targets.push(sprite);
-            }
+    public animateMovingBounce(indices: number[]): Promise<void>[] {
+        return indices.map(index => {
+            const sprite = this.puyoSprites[index];
+            return this.doBounceTween(sprite);
+        });
+    }
+
+    public async animateClear(groups: {cell: number, places: {x:number, y:number}[]}[]) {
+        const sprites: Phaser.GameObjects.Arc[] = [];
+        groups.forEach(group => {
+            group.places.forEach(p => {
+                sprites.push(this.boardSprites[p.x][p.y]);
+            });
         });
 
-        if (targets.length === 0) return;
+        if (sprites.length === 0) return;
 
-        return new Promise((resolve) => {
+        return new Promise<void>(resolve => {
             this.scene.tweens.add({
-                targets: targets,
-                scaleY: 0.8,
-                scaleX: 1.2,
-                duration: 40,
-                yoyo: true,
-                ease: 'Quad.easeOut',
+                targets: sprites,
+                alpha: 0,
+                scaleX: 1.5,
+                scaleY: 1.5,
+                duration: 200,
                 onComplete: () => {
-                    targets.forEach(t => t.setScale(1));
+                    // 演出が終わったら非表示にする
+                    sprites.forEach(s => {
+                        s.setVisible(false);
+                        s.setAlpha(1);
+                        s.setScale(1);
+                    });
                     resolve();
                 }
             });
         });
     }
 
-    public async animateDrops(drops: {x:number, fromY:number, toY:number, cell:number}[]): Promise<void> {
+    public async animateDrops(drops: {x:number, fromY:number, toY:number, cell:number}[]) {
         if (drops.length === 0) return;
-        
-        // 落下するぷよに関連する線を消す
-        drops.forEach(d => {
-            if (d.x < this.COLS - 1) this.lineSpritesH[d.x][d.fromY].setVisible(false);
-            if (d.x > 0) this.lineSpritesH[d.x - 1][d.fromY].setVisible(false);
-            if (d.fromY < this.ROWS - 1) this.lineSpritesV[d.x][d.fromY].setVisible(false);
-            if (d.fromY > 0) this.lineSpritesV[d.x][d.fromY - 1].setVisible(false);
-        });
 
-        const colorMap = [0xff0000, 0xffff00, 0x00ff00, 0x0000ff, 0x888888, 0xffffff];
-        
-        // 下から順に処理することで、連続した入れ替えを正しく行う
-        const sortedDrops = [...drops].sort((a, b) => a.toY - b.toY);
-
-        return new Promise((resolve) => {
-            let completed = 0;
-            sortedDrops.forEach((d) => {
-                const sprite = this.boardSprites[d.x][d.fromY];
-                
-                // 配列内の参照を入れ替えて論理状態と同期させる
-                const temp = this.boardSprites[d.x][d.toY];
-                this.boardSprites[d.x][d.toY] = sprite;
-                this.boardSprites[d.x][d.fromY] = temp;
-
-                sprite.setVisible(true);
-                sprite.setFillStyle(colorMap[d.cell]); // 落下する色をセット
-                sprite.setAlpha(1);
-                
-                this.scene.tweens.killTweensOf(sprite);
-                const distance = Math.abs(d.fromY - d.toY);
+        const promises = drops.map(drop => {
+            const sprite = this.boardSprites[drop.x][drop.fromY];
+            const targetY = this.getPixelY(drop.toY);
+            
+            return new Promise<void>(resolve => {
                 this.scene.tweens.add({
                     targets: sprite,
-                    y: this.getPixelY(d.toY),
-                    duration: distance * 40 + 100, // 1マスあたり40ms + 基本時間100ms
-                    ease: 'Power2.easeIn',
+                    y: targetY,
+                    duration: 100 + (drop.fromY - drop.toY) * 50, // 距離に応じて落下時間を調整
+                    ease: 'Quad.easeIn',
                     onComplete: () => {
-                        completed++;
-                        if (completed === sortedDrops.length) {
-                            // すべての落下が完了したら、着地したぷよをバウンドさせる
-                            const landingPlaces = sortedDrops.map(sd => ({ x: sd.x, y: sd.toY }));
-                            this.animateLandingBounce(landingPlaces, []).then(() => resolve());
-                        }
+                        this.doBounceTween(sprite).then(resolve);
                     }
                 });
             });
         });
+
+        await Promise.all(promises);
+
+        // アニメーション用に使ったスプライトは一旦隠し、位置を戻しておく
+        drops.forEach(drop => {
+            const sprite = this.boardSprites[drop.x][drop.fromY];
+            sprite.setVisible(false);
+            sprite.setPosition(this.getPixelX(drop.x), this.getPixelY(drop.fromY));
+        });
+        }
+
+    public async animateBounceByIndex(index: number): Promise<void> {
+        const sprite = this.puyoSprites[index];
+        return this.doBounceTween(sprite);
     }
 
-    public async wait(duration: number): Promise<void> {
-        return new Promise((resolve) => {
+    public async animateFall(index: number, targetY: number): Promise<void> {
+        const sprite = this.puyoSprites[index];
+        const targetPixelY = this.getPixelY(targetY);
+        
+        return new Promise(resolve => {
             this.scene.tweens.add({
-                targets: { val: 0 },
-                val: 1,
-                duration: duration,
-                onComplete: () => resolve()
+                targets: sprite,
+                y: targetPixelY,
+                duration: 150,
+                ease: 'Quad.easeIn',
+                onComplete: () => {
+                    this.doBounceTween(sprite).then(resolve);
+                }
             });
         });
     }
-
-    public async animateBounce(){
-
+    
+    public animateUpdate(time: number, delta: number){
+        //this.setSpritePos(this.movingPuyo);
     }
-    public async animateChainStep(step: any): Promise<void> {
-        return new Promise((resolve) => {
-            const blinkTargets: (Phaser.GameObjects.Arc | Phaser.GameObjects.Rectangle)[] = [];
 
-            // 1. 点滅させる対象（ぷよ本体と接続線）を重複なく収集
-            step.cleared.forEach((group: any) => {
-                group.places.forEach((p: any) => {
-                    const sprite = this.boardSprites[p.x][p.y];
-                    if (!blinkTargets.includes(sprite)) blinkTargets.push(sprite);
+    // --- Private Helpers ---
+    private getPixelX(x: number) { return x * this.CELL_SIZE + this.CELL_SIZE / 2; }
+    private getPixelY(y: number) { return (12 - y) * this.CELL_SIZE - this.CELL_SIZE / 2; }
 
-                    if (p.x < this.COLS - 1 && group.places.some((n: any) => n.x === p.x + 1 && n.y === p.y)) {
-                        const line = this.lineSpritesH[p.x][p.y];
-                        if (!blinkTargets.includes(line)) blinkTargets.push(line);
-                    }
-                    if (p.y < this.ROWS - 1 && group.places.some((n: any) => n.x === p.x && n.y === p.y + 1)) {
-                        const line = this.lineSpritesV[p.x][p.y];
-                        if (!blinkTargets.includes(line)) blinkTargets.push(line);
-                    }
-                });
-            });
+    private rotationTween: Phaser.Tweens.Tween | null = null;
+    private doRotationTweens(rotation: number, angles: {before: number;after: number;}): Promise<void> {
+        if(this.rotationTween) this.rotationTween.stop();
 
-            // 2. 一括で点滅アニメーション開始
-            if (blinkTargets.length > 0) {
-                this.scene.tweens.killTweensOf(blinkTargets);
-                this.scene.tweens.add({
-                    targets: blinkTargets,
-                    alpha: 0,
-                    duration: 0,
-                    hold: 100,
-                    repeatDelay: 100,
-                    yoyo: true,
-                    repeat: 1
-                });
-            }
+        this.movingPuyo.angle = angles.before;
 
-            // 3. 待機後の消去処理 (点滅時間に合わせて開始)
-            this.scene.tweens.add({
-                targets: { val: 0 },
-                val: 1,
-                duration: 450,
-                onComplete: async () => {
-                    step.cleared.forEach((group: any) => {
-                        group.places.forEach((p: any) => {
-                            this.boardSprites[p.x][p.y].setVisible(false).setAlpha(1);
-                            if (p.x < this.COLS - 1) this.lineSpritesH[p.x][p.y].setVisible(false).setAlpha(1);
-                            if (p.x > 0) this.lineSpritesH[p.x - 1][p.y].setVisible(false).setAlpha(1);
-                            if (p.y < this.ROWS - 1) this.lineSpritesV[p.x][p.y].setVisible(false).setAlpha(1);
-                            if (p.y > 0) this.lineSpritesV[p.x][p.y - 1].setVisible(false).setAlpha(1);
-                        });
-                    });
-
-                    if (step.drops.length > 0) {
-                        await this.animateDrops(step.drops);
-                    }
+        return new Promise(resolve => {
+            this.rotationTween = this.scene.tweens.add({
+                targets: this.movingPuyo,
+                angle: angles.before + rotation,
+                duration: this.ROTATION_DURATION,
+                ease: 'Linear',
+                onUpdate: () => {
+                    this.setSpritePos(this.movingPuyo);
+                },
+                onComplete: () => {
+                    this.movingPuyo.angle = angles.after; 
+                    this.setSpritePos(this.movingPuyo);
+                    resolve();
+                },
+                onStop: () => {
                     resolve();
                 }
+            });
+        });
+    }
+    private _calculateAngle(axis: {x: number, y: number, color?: number}, child: {x: number, y: number, color?: number}): number {
+        const dx = child.x - axis.x;
+        const dy = child.y - axis.y;
+
+        // グリッド座標の差分からatan2(y, x)で角度をラジアンで取得
+        const angleRad = Math.atan2(dy, dx);
+
+        // ラジアンを度に変換
+        let angleDeg = Phaser.Math.RadToDeg(angleRad);
+
+        // 角度を0-360の範囲に正規化
+        if (angleDeg < 0) {
+            angleDeg += 360;
+        }
+
+        return Math.round(angleDeg); // 浮動小数点誤差を避けるために丸める
+    }
+
+    private getAngle(
+        before:{x:number,y:number,color?:number;}[],
+        after:{x:number,y:number,color?:number;}[]
+    ): {before: number, after: number} {
+        // 変化前の角度を計算
+        const beforeAngle = this._calculateAngle(before[0], before[1]);
+
+        // 変化後の角度を計算
+        const afterAngle = this._calculateAngle(after[0], after[1]);
+
+        return { before: beforeAngle, after: afterAngle };
+    }
+
+    private setSpritePos(place: {axis:{x:number,y:number}, angle: number}){
+        this.movingPuyo = place;
+        const axisPuyo = this.puyoSprites[0];
+        const childPuyo = this.puyoSprites[1];
+
+        // 軸ぷよのピクセル座標を計算
+        const axisX = this.getPixelX(place.axis.x);
+        const axisY = this.getPixelY(place.axis.y);
+        axisPuyo.setPosition(axisX, axisY);
+
+        // 角度をラジアンに変換
+        const angleRad = Phaser.Math.DegToRad(place.angle);
+
+        // 子ぷよの相対座標を計算
+        // Y軸は上方向が正として角度を計算するめ、sinの結果を反転させてPhaserの座標系（Yが下向き）に合わせる
+        const childX = axisX + this.CELL_SIZE * Math.cos(angleRad);
+        const childY = axisY - this.CELL_SIZE * Math.sin(angleRad);
+
+        childPuyo.setPosition(childX, childY);
+    }
+
+    public async doBounceTween(sprite: Phaser.GameObjects.Arc): Promise<void>{
+        // 既存のツイーンがある場合は停止（連打対策）
+        this.scene.tweens.killTweensOf(sprite);
+
+        return new Promise(resolve => {
+            this.scene.tweens.chain({
+                targets: sprite,
+                tweens: [
+                    {
+                        scaleX: 1.25,
+                        scaleY: 0.85,
+                        duration: 30,
+                        ease: 'Quad.easeOut'
+                    },
+                    {
+                        scaleX: 1,
+                        scaleY: 1,
+                        duration: 20,
+                        ease: 'Elastic.out',
+                        easeParams: [1, 0.3]
+                    }
+                ],
+                onComplete: resolve,
+                onTerminate: resolve,
             });
         });
     }

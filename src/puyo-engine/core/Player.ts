@@ -95,6 +95,7 @@ export default class Player {
         this.place.forEach((p, i) => {
             this.board.setPuyo(p.x, Math.floor(p.y), this.moving[i]);
         });
+        this.board.drop();
         this.moving = [];
     }
     public moveDown(): boolean{
@@ -226,7 +227,7 @@ export default class Player {
         }
     
         // 3. Flip (180 deg rotation)
-        if (this.lastRotation === direction) {
+        if (this.lastRotation !== 'none') {
             //縦回転じゃないときは却下
             if(this.place[0].x !== this.place[1].x) return;
             // 180度回転時は常に軸ぷよと回転ぷよの位置を入れ替える（クイックターン）

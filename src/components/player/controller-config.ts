@@ -5,7 +5,7 @@ export const CONTROLLER_CONFIG = {
 
     // 移動・回転関連 (ms)
     HORIZONTAL_MOVE_INTERVAL: 100,
-    ROTATION_DURATION: 60,
+    ROTATION_DURATION: 3000,
 
     // 待機・演出関連 (ms)
     LANDING_WAIT_DURATION: 250,
@@ -31,3 +31,8 @@ export const CONTROLLER_CONFIG = {
         ROTATE_LEFT: 'A'
     }
 };
+export const ANIMATION_CONFIG = {
+    DROP_DURATION_BASE: 280,
+    DROP_DURATION: 50,
+    BOUNCE_DURATION: 40,
+}

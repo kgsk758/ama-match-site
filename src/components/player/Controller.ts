@@ -9,6 +9,7 @@ import { PLAYER_CONFIG } from "../../constants";
 import { CONTROLLER_CONFIG } from "./controller-config";
 
 export default class Controller {
+    // --- Components ---
     private player: Player;
     private scene: Phaser.Scene;
     private boardView: BoardView;
@@ -17,25 +18,21 @@ export default class Controller {
     private nextView: NextView;
     private acView: ACView;
 
-    private dropTimer: number = 0;
-    private horizontalMoveTimer: number = 0;
-
-    private downKey: Phaser.Input.Keyboard.Key | null = null;
-    private leftKey: Phaser.Input.Keyboard.Key | null = null;
-    private rightKey: Phaser.Input.Keyboard.Key | null = null;
-
-    private isChaining: boolean = false;
-    private chainCount: number = 0;
-
-    // 接地（ロックダウン）関連
-    private lockDownTween: Phaser.Tweens.Tween | null = null;
-    private lockDownResetCount: number = 0;
-    private isGrounded: boolean = false; // 接地状態を追跡
+    // --- Input Keys ---
+    private keys: {
+        down?: Phaser.Input.Keyboard.Key,
+        left?: Phaser.Input.Keyboard.Key,
+        right?: Phaser.Input.Keyboard.Key,
+        up?: Phaser.Input.Keyboard.Key,
+        rotateLeft?: Phaser.Input.Keyboard.Key,
+        rotateRight?: Phaser.Input.Keyboard.Key
+    } = {};
 
     constructor(player: Player, scene: Phaser.Scene, place: {x:number, y:number}, config: {team: number, type: string}) {
         this.player = player;
         this.scene = scene;
 
+        // Views Initialization
         this.boardView = new BoardView(scene, place.x, place.y);
         this.garbageView = new GarbageView(scene, place.x, place.y);
         this.scoreView = new ScoreView(scene, place.x, place.y);
@@ -43,265 +40,292 @@ export default class Controller {
         this.acView = new ACView(scene);
         this.boardView.getContainer().addAt(this.acView.text, 1);
 
-        this.player.drop();
-        // 初期状態の接地チェック
-        this.isGrounded = !this.player.canMoveDown();
-        if (this.isGrounded) {
-            this.startLockDown(CONTROLLER_CONFIG.LOCK_DOWN_DURATION);
-            this.triggerLandingBounce();
-        }
-        
-        this.boardView.animateMove(this.player.place, this.player.place, this.player.moving);
-        this.nextView.updateNext(this.player.next);
-
         if (config.type === PLAYER_CONFIG.HUMAN) {
-            if (this.scene.input.keyboard) {
-                this.downKey = this.scene.input.keyboard.addKey(CONTROLLER_CONFIG.KEYS.DOWN);
-                this.leftKey = this.scene.input.keyboard.addKey(CONTROLLER_CONFIG.KEYS.LEFT);
-                this.rightKey = this.scene.input.keyboard.addKey(CONTROLLER_CONFIG.KEYS.RIGHT);
-            }
-            this.setupInput();
+            this.initKeys();
         }
+
+        this.currentState = 'INIT';
+        this.dropTsumo();
     }
 
-    private setupInput() {
+    private initKeys() {
         if (!this.scene.input.keyboard) return;
-        
-        this.scene.input.keyboard.on(`keydown-${CONTROLLER_CONFIG.KEYS.DOWN}`, () => this.handleAction('down'));
-        this.scene.input.keyboard.on(`keydown-${CONTROLLER_CONFIG.KEYS.UP}`, () => this.handleAction('rotate-right'));
-        this.scene.input.keyboard.on(`keydown-${CONTROLLER_CONFIG.KEYS.ROTATE_RIGHT}`, () => this.handleAction('rotate-right'));
-        this.scene.input.keyboard.on(`keydown-${CONTROLLER_CONFIG.KEYS.ROTATE_LEFT}`, () => this.handleAction('rotate-left'));
+        const K = CONTROLLER_CONFIG.KEYS;
+        this.keys = {
+            down: this.scene.input.keyboard.addKey(K.DOWN),
+            left: this.scene.input.keyboard.addKey(K.LEFT),
+            right: this.scene.input.keyboard.addKey(K.RIGHT),
+            up: this.scene.input.keyboard.addKey(K.UP),
+            rotateLeft: this.scene.input.keyboard.addKey(K.ROTATE_LEFT),
+            rotateRight: this.scene.input.keyboard.addKey(K.ROTATE_RIGHT)
+        };
     }
 
-    private handleAction(action: 'left' | 'right' | 'down' | 'rotate-left' | 'rotate-right') {
-        if (this.isChaining || !(this.scene as any).gamePlaying) return;
-
-        const oldPlace = JSON.parse(JSON.stringify(this.player.place));
-        let success = false;
-        const isRotation = action.startsWith('rotate');
-
-        switch (action) {
-            case 'left': success = this.player.moveLeft(); break;
-            case 'right': success = this.player.moveRight(); break;
-            case 'down': success = this.player.moveDown(); break;
-            case 'rotate-left': this.player.rotateLeft(); success = true; break;
-            case 'rotate-right': this.player.rotateRight(); success = true; break;
-        }
-
-        //if (success) {
-            this.boardView.animateMove(oldPlace, this.player.place, this.player.moving, isRotation);
-            
-            // 地面との接触状態をチェック
-            if (this.player.canMoveDown()) {
-                // 空中に浮いた場合、接地フラグとタイマーを解除
-                if (this.isGrounded) {
-                    this.isGrounded = false;
-                    this.cancelLockDown();
-                    // ここではカウントを増やさない（空中での強制設置を防ぐ）
-                }
-            } else {
-                // 接地した、あるいは接地したままアクションした場合はカウントを増やす
-                this.lockDownResetCount++;
-
-                if (this.lockDownResetCount > CONTROLLER_CONFIG.LOCK_DOWN_RESET_LIMIT) {
-                    this.landPuyo();
-                    return;
-                }
-
-                if (!this.isGrounded) {
-                    // 【空中から接地した瞬間】
-                    this.isGrounded = true;
-                    this.startLockDown(CONTROLLER_CONFIG.LOCK_DOWN_DURATION);
-                    this.triggerLandingBounce();
-                } else {
-                    // 【すでに接地している状態で移動・回転した時】
-                    this.resetLockDownTimer(CONTROLLER_CONFIG.LOCK_DOWN_DURATION);
-                    // 接地中の移動・回転でも少しバウンスさせて手応えを出す
-                    this.triggerLandingBounce();
-                }
-
-                if (action === 'down' && this.downKey && this.downKey.isDown) {
-                    this.landPuyo(true);
-                    console.log('immediate landing')
-                }
-            }
-        //}
+    private currentState: 'INIT' | 'FALLING' | 'LANDING' = 'INIT';
+    // ツモ->設置->連鎖->おじゃま のメインフローを記述
+    private start(){
+        this.dropTsumo();
     }
 
-    private startLockDown(duration: number) {
-        this.cancelLockDown();
-        this.lockDownTween = this.scene.tweens.add({
-            targets: { val: 0 },
-            val: 1,
-            duration: duration,
-            onComplete: () => {
-                this.landPuyo();
-            }
-        });
-    }
-
-    private resetLockDownTimer(duration: number) {
-        // 現在のタイマーを止めて、同じカウントのまま再開する
-        if (this.lockDownTween) {
-            this.lockDownTween.stop();
-            this.startLockDown(duration);
-        }
-    }
-
-    private cancelLockDown() {
-        if (this.lockDownTween) {
-            this.lockDownTween.stop();
-            this.lockDownTween = null;
-        }
-    }
-
-    private async landPuyo(softDrop: boolean = false) {
-        if (this.isChaining) return;
-        this.isChaining = true;
-        this.cancelLockDown();
-        this.lockDownResetCount = 0;
+    private dropTsumo(){
+        this.activeAnimations = [];
+        this.movingAnimations = [];
         this.isGrounded = false;
-        
-        // 【重要】盤面に固定する前に、現在の位置から接地しているぷよを特定する
-        const landingPlaces = JSON.parse(JSON.stringify(this.player.place));
-        const isDirectlyGrounded = this.player.place.map((p) => !this.player.isValidPosition(p.x, p.y - 0.5));
-        const groundedIndices: number[] = [];
-        isDirectlyGrounded.forEach((isGrounded, i) => {
-            if (isGrounded) {
-                groundedIndices.push(i);
-            } else {
-                const other = 1 - i;
-                if (isDirectlyGrounded[other] && 
-                    this.player.place[i].x === this.player.place[other].x && 
-                    this.player.place[i].y > this.player.place[other].y) {
-                    groundedIndices.push(i);
-                }
-            }
-        });
-
-        // 盤面を更新
-        this.player.fixToBoard();
-        this.boardView.updateBoard(this.player.board.grid);
-        
-        if(softDrop && groundedIndices.length > 0){
-            // 盤面更新後に、特定したインデックスに対してバウンドを実行
-            this.boardView.animateLandingBounce(landingPlaces, groundedIndices);
-        }
-        
-        const initialDrops = this.player.board.drop();
-
-        /*
-        if (forceWait && initialDrops.length == 0) { //高速落下かつちぎりなし
-            await this.boardView.wait(CONTROLLER_CONFIG.SOFT_DROP_LANDING_DELAY);
-        }
-        */
-
-        if (initialDrops.length > 0) {
-            await this.boardView.animateDrops(initialDrops);
-            //await this.boardView.wait(CONTROLLER_CONFIG.CHIGIRI_WAIT_DURATION);
-        }
-        await this.boardView.wait(CONTROLLER_CONFIG.WAIT_DURAION);
-        
-        this.boardView.updateBoard(this.player.board.grid);
-
-        this.chainCount = 1;
-        await this.processChain();
+        this.dropCount = 0;
+        this.softDropCount = 0;
+        this.moveCount = 0;
+        this.lockDownCount = 0;
+        this.lockDownReset = 0;
+        this.player.drop();
+        this.boardView.initMovingPuyo(this.getMovingPuyo());
+        console.log(this.player.place);
+        this.player.place.forEach((value,index)=>{this.puyosToSet.push(index);});
+        this.refreshView();
+        this.currentState = 'FALLING';
     }
 
-    private async processChain() {
-        /*
-        if (this.chainCount > 1) {
-            await this.boardView.wait(CONTROLLER_CONFIG.CHAIN_STEP_WAIT_DURATION);
-        }
-        */
+    private dropCount: number = 0;
+    private softDropCount: number = 0;
+    private isGrounded: boolean = false;
+    private moveCount: number = 0;
+    private lockDownCount: number = 0;
+    private lockDownReset: number = 0;
+    private puyosToSet: number[] = []; 
+    private activeAnimations: Promise<void>[] = []; 
+    private movingAnimations: Promise<void>[] = []; 
 
-        const step = this.player.executeChainStep(this.chainCount);
-        if (step) {
-            this.scoreView.updateScore(this.player.score);
-            this.acView.update(this.player.allClear);
-            
-            await this.boardView.animateChainStep(step);
-            this.boardView.updateBoard(this.player.board.grid);
-            
-            this.chainCount++;
-            await this.boardView.wait(CONTROLLER_CONFIG.WAIT_DURAION);
-            await this.processChain();
-        } else {
-            /*
-            if (this.chainCount === 1) {
-                await this.boardView.wait(CONTROLLER_CONFIG.LANDING_WAIT_DURATION);
-            }
-            */
-
-            this.player.checkAllClear();
-            this.acView.update(this.player.allClear);
-
-            this.isChaining = false;
-            this.player.drop();
-            this.boardView.animateMove(this.player.place, this.player.place, this.player.moving);
-            this.nextView.updateNext(this.player.next);
-        }
-    }
-
-    private triggerLandingBounce() {
-        // 読み取り専用で座標を渡し、BoardView側で処理させる（ディープコピーを避ける）
-        const landingPlaces = this.player.place;
-        const isDirectlyGrounded = landingPlaces.map((p) => !this.player.isValidPosition(p.x, p.y - 0.5));
-        const groundedIndices: number[] = [];
-        
-        isDirectlyGrounded.forEach((isGrounded, i) => {
-            if (isGrounded) {
-                groundedIndices.push(i);
-            } else {
-                const other = 1 - i;
-                if (isDirectlyGrounded[other] && 
-                    landingPlaces[i].x === landingPlaces[other].x && 
-                    landingPlaces[i].y > landingPlaces[other].y) {
-                    groundedIndices.push(i);
-                }
-            }
-        });
-        
-        if (groundedIndices.length > 0) {
-            this.boardView.animateLandingBounce(landingPlaces, groundedIndices);
-        }
-    }
-
+    /**
+     * メイン更新ループ
+     * ここに新しい操作仕様（移動、回転、接地タイマー等）を実装
+     */
     public update(time: number, delta: number) {
-        if (this.isChaining) return;
-        if (!delta) delta = 16; 
+        if (!(this.scene as any).gamePlaying) return;
 
-        // 1. 横移動
-        this.horizontalMoveTimer += delta;
-        if (this.leftKey?.isDown) {
-            if (this.horizontalMoveTimer >= CONTROLLER_CONFIG.HORIZONTAL_MOVE_INTERVAL) {
-                this.handleAction('left');
-                this.horizontalMoveTimer = 0;
+        switch(this.currentState){
+            case "INIT": 
+                return;
+
+            case "FALLING":
+                if(Phaser.Input.Keyboard.JustDown(this.keys.down!)){
+                    this.dropStep();
+                }
+
+                if(this.keys.down?.isDown){
+                    this.dropCount = 0;
+                    this.softDropCount += delta;
+                    if(this.softDropCount >= CONTROLLER_CONFIG.SOFT_DROP_INTERVAL){
+                        this.softDropCount = 0;
+                        this.dropStep();
+                    }
+                }
+
+                if(Phaser.Input.Keyboard.JustDown(this.keys.right!)){
+                    this.moveCount = 0;
+                    this.moveRight();
+                }
+                if(Phaser.Input.Keyboard.JustDown(this.keys.left!)){
+                    this.moveCount = 0;
+                    this.moveLeft();
+                }
+                if(this.keys.right?.isDown){
+                    this.moveCount += delta;
+                    if(this.moveCount >= CONTROLLER_CONFIG.HORIZONTAL_MOVE_INTERVAL){
+                        this.moveCount = 0;
+                        this.moveRight();
+                    }
+                }
+                if(this.keys.left?.isDown){
+                    this.moveCount += delta;
+                    if(this.moveCount >= CONTROLLER_CONFIG.HORIZONTAL_MOVE_INTERVAL){
+                        this.moveCount = 0;
+                        this.moveLeft();
+                    }
+                }
+
+                this.dropCount += delta;
+                if(this.dropCount >= CONTROLLER_CONFIG.DROP_INTERVAL){
+                    this.dropCount = 0;
+                    this.dropStep();
+                }
+
+                if (Phaser.Input.Keyboard.JustDown(this.keys.rotateRight!)) {
+                    const temp = structuredClone(this.player.place);
+                    this.player.rotateRight();
+                    const p = this.boardView.rotateRight(temp, this.player.place);
+                    if (p) this.movingAnimations.push(p);
+                }
+                if (Phaser.Input.Keyboard.JustDown(this.keys.rotateLeft!)) {
+                    const temp = structuredClone(this.player.place);
+                    this.player.rotateLeft();
+                    const p = this.boardView.rotateLeft(temp, this.player.place);
+                    if (p) this.movingAnimations.push(p);
+                }
+
+                if(this.player.canMoveDown()){
+                    if(this.isGrounded){//床を離れたフレーム
+                        this.dropCount = 0;
+                        this.lockDownCount = 0;
+                    }
+                    this.isGrounded = false;
+                }else{
+                    if(!this.isGrounded){//床についた瞬間
+                        this.handleMovingBounce();
+
+                        console.log('just landed');
+                        this.lockDownReset++;
+                    }
+                    this.isGrounded = true;
+                }
+
+                if(this.isGrounded){
+                    if(this.keys.down?.isDown){
+                        //設置
+                        this.landPuyo();
+                    }
+                    this.lockDownCount += delta;
+                    if(this.lockDownCount >= CONTROLLER_CONFIG.LOCK_DOWN_DURATION){
+                        //設置
+                        this.landPuyo();
+                    }
+                }
+
+                if(this.lockDownReset >= CONTROLLER_CONFIG.LOCK_DOWN_RESET_LIMIT){
+                    //設置
+                    this.landPuyo();
+                }
+
+                break;
+
+            case "LANDING":
+                break;
+        }
+    }
+
+    private dropStep(){
+        this.player.moveDown();
+        this.boardView.moveAxis(this.getMovingPuyo());
+    }
+
+    private moveRight(){
+        this.player.moveRight();
+        this.boardView.moveAxis(this.getMovingPuyo());
+    }
+
+    private moveLeft(){
+        this.player.moveLeft();
+        this.boardView.moveAxis(this.getMovingPuyo());
+    }
+
+    private async landPuyo(){
+        this.currentState = 'LANDING';
+
+        // 1. まず操作中のアニメーション（回転など）がすべて終わるのを待つ
+        await Promise.all(this.movingAnimations);
+        this.movingAnimations = [];
+        
+        const bounceIndices = this.getMovingBounceIndices();
+        
+        // 各ぷよの最終的な着地位置を計算
+        const puyos = this.player.place.map((p, i) => ({
+            x: p.x,
+            y: p.y,
+            index: i
+        })).sort((a, b) => a.y - b.y);
+
+        const tempGrid = this.player.board.grid.map(col => [...col]);
+
+        for (const p of puyos) {
+            // 接地済み（bounceIndicesに含まれる）の場合は、既にupdate()でバウンドが開始されているので何もしない
+            // 空中にある場合のみ落下アニメーションを開始し、管理配列に追加する
+            if (!bounceIndices.includes(p.index)) {
+                const x = Math.floor(p.x);
+                let targetY = 0;
+                for (let y = 0; y < this.player.board.rows; y++) {
+                    if (tempGrid[x][y] === 5) { // 5 は NONE_NUM
+                        targetY = y;
+                        break;
+                    }
+                }
+                tempGrid[x][targetY] = 0; 
+                this.activeAnimations.push(this.boardView.animateFall(p.index, targetY));
             }
-        } else if (this.rightKey?.isDown) {
-            if (this.horizontalMoveTimer >= CONTROLLER_CONFIG.HORIZONTAL_MOVE_INTERVAL) {
-                this.handleAction('right');
-                this.horizontalMoveTimer = 0;
-            }
-        } else {
-            this.horizontalMoveTimer = CONTROLLER_CONFIG.HORIZONTAL_MOVE_INTERVAL;
         }
 
-        // 2. 接地判定と自由落下
-        // 毎フレームの canMoveDown() チェックを廃止し、キャッシュされた isGrounded を使用
-        if (this.isGrounded) {
-            this.dropTimer = 0;
-            // 接地中の追加処理（ロックダウン等）は handleAction と Tweens で管理されているため
-            // ここでの毎フレーム計算は不要
-        } else {
-            this.dropTimer += delta;
-            const isSoftDropping = this.downKey && this.downKey.isDown;
-            const interval = isSoftDropping ? CONTROLLER_CONFIG.SOFT_DROP_INTERVAL : CONTROLLER_CONFIG.DROP_INTERVAL;
+        // すべてのアニメーション（以前に開始されたバウンドも含めて）の完了を待つ
+        await Promise.all(this.activeAnimations);
+        this.activeAnimations = [];
 
-            if (this.dropTimer >= interval) {
-                this.handleAction('down');
-                this.dropTimer = 0;
-            }
+        this.player.fixToBoard();
+        this.refreshView();
+
+        // 連鎖アニメーションの開始
+        let chainCount = 1;
+        while (true) {
+            // 現在の盤面で繋がっているぷよを特定 (論理的にはまだ消さない)
+            const connects = this.player.board.getConnected();
+            if (connects.length === 0) break;
+
+            // 1. 消去アニメーション
+            await this.boardView.animateClear(connects);
+
+            // 2. 論理的な消去と落下を実行
+            const step = this.player.executeChainStep(chainCount);
+            if (!step) break;
+
+            // 3. 落下アニメーション (step.drops にどこからどこへ落ちたか入っている)
+            await this.boardView.animateDrops(step.drops);
+
+            // 4. 表示の同期 (最終的なグリッドの状態に合わせる)
+            this.refreshView();
+
+            chainCount++;
         }
+        
+        this.dropTsumo();
+    }
+    /**
+     * View全体の表示を現在のPlayerの状態に合わせて更新する
+     */
+    private refreshView() {
+        const movingPuyos = this.getMovingPuyo();
+        
+        this.boardView.render(this.player.board.grid, movingPuyos);
+        this.nextView.updateNext(this.player.next);
+        this.scoreView.updateScore(this.player.score);
+        this.acView.update(this.player.allClear);
+    }
+
+    private getMovingPuyo(): {x: number, y: number, color: number}[] {
+        if (!this.player.moving || this.player.moving.length === 0) return [];
+        const movingPuyos = this.player.place.map((p, i) => ({
+            x: p.x,
+            y: p.y,
+            color: this.player.moving[i]
+        }));
+        return movingPuyos;
+    }
+
+    private handleMovingBounce(){
+        const bounceIdx = this.getMovingBounceIndices();
+        const promises = this.boardView.animateMovingBounce(bounceIdx);
+        this.activeAnimations.push(...promises);
+    }
+
+    private getMovingBounceIndices(): number[]{
+        const indices: number[] = [];
+        //縦向き
+        if(this.player.place[0].x===this.player.place[1].x){ 
+            return [0,1];
+        }
+        const step = 0.5; //自由落下の最小単位
+        const p0 = this.player.place[0]; //軸ぷよ
+        const p1 = this.player.place[1];
+        if(!this.player.isValidPosition(p0.x, p0.y - step)){
+            indices.push(0);
+        }
+        if(!this.player.isValidPosition(p1.x, p1.y - step)){
+            indices.push(1);
+        }
+        return indices;
     }
 }
