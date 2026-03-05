@@ -85,6 +85,60 @@ export default class Player {
         return this.allClear;
     }
 
+    public getStats(targetPoint: number): {
+        attack: number;
+        attack_frame: number;
+        attack_chain: number;
+        allClear: boolean;
+    } {
+        // Clone the board to simulate future state without affecting the real board
+        const tempBoard = new Board({
+            rows: this.board.rows,
+            columns: this.board.columns
+        });
+        tempBoard.grid = this.board.grid.map(col => [...col]);
+
+        let totalScore = this.attack_score; // Include current partial score
+        let currentChain = 0;
+        let frameCount = 0;
+
+        // Simulate the entire chain process
+        while (true) {
+            const connects = tempBoard.getConnected();
+            if (connects.length === 0) break;
+
+            currentChain++;
+            const score = tempBoard.getScore(connects, currentChain);
+            totalScore += score;
+
+            // Remove popped puyos
+            connects.forEach(c => {
+                c.places.forEach(p => {
+                    tempBoard.grid[p.x][p.y] = 5; // NONE
+                });
+            });
+
+            // Simulate drop
+            tempBoard.drop();
+
+            // Calculate frames for this chain step
+            // Approximate frames: Pop animation + Drop animation
+            // Assuming 60fps, common puyo timing: 
+            // - Pop: ~20-30 frames
+            // - Drop: ~10-20 frames
+            frameCount += 40; 
+        }
+
+        const futureAttack = Math.floor(totalScore / targetPoint);
+
+        return {
+            attack: this.attack + futureAttack,
+            attack_frame: frameCount,
+            attack_chain: currentChain,
+            allClear: this.allClear && tempBoard.isEmpty()
+        };
+    }
+
     public drop(){
         this.moving = this.next.shift()!;
         this.next.push(this.queue.popQueue());

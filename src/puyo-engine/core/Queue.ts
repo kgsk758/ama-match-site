@@ -10,7 +10,7 @@ export default class Queue {
     }
 
     public popQueue(): number[]{
-        if(this.queue.length < 4){
+        if(this.queue.length < 10){
             const queueResult = this.createQueue(this.currentSeed, false);
             this.currentSeed = queueResult.nextSeed;
             this.queue = [...this.queue, ...queueResult.queue];

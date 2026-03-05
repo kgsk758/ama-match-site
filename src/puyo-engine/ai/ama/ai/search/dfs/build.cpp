@@ -6,7 +6,7 @@ namespace dfs
 namespace build
 {
 
-// Starts the depth first search
+// Starts the depth first search (Modified for Emscripten: no threads)
 Result search(Field field, cell::Queue queue, eval::Weight w, i32 thread_count)
 {
     // We don't search if the input queue is too small
@@ -26,125 +26,88 @@ Result search(Field field, cell::Queue queue, eval::Weight w, i32 thread_count)
     // Generates all the possible first placements
     auto placements = move::generate(field, queue[0].first == queue[0].second);
 
-    // Divides the works among the threads
-    std::mutex mtx;
-    std::vector<std::thread> threads;
+    // Divides the works sequentially (Modified for Emscripten: no threads)
+    while (placements.get_size() > 0)
+    {
+        move::Placement placement = placements[placements.get_size() - 1];
+        placements.pop();
 
-    for (i32 t = 0; t < thread_count; ++t) {
-        threads.emplace_back([&] () {
-            while (true)
-            {
-                move::Placement placement;
+        // Creates candidate
+        Candidate candidate = Candidate {
+            .placement = placement,
+            .eval = eval::Result(),
+            .eval_fast = INT32_MIN
+        };
 
-                // Locks mutex and takes 1 placements from the placements list above
-                {
-                    std::lock_guard<std::mutex> lk(mtx);
+        // Updates child node
+        auto child = root;
 
-                    if (placements.get_size() < 1) {
-                        break;
-                    }
+        child.field.drop_pair(placement.x, placement.r, queue[0]);
+        auto mask_pop = child.field.pop();
 
-                    placement = placements[placements.get_size() - 1];
-                    placements.pop();
-                }
+        // Death
+        if (child.field.get_height(2) > 11) {
+            continue;
+        }
 
-                // Creates candidate
-                Candidate candidate = Candidate {
-                    .placement = placement,
-                    .eval = eval::Result(),
-                    .eval_fast = INT32_MIN
-                };
+        // Updates child's stats
+        child.tear += root.field.get_drop_pair_frame(placement.x, placement.r) - 1;
+        child.waste += static_cast<i32>(mask_pop.get_size());
 
-                // Updates child node
-                auto child = root;
+        candidate.eval_fast = eval::evaluate(child.field, child.tear, child.waste, w).value;
 
-                child.field.drop_pair(placement.x, placement.r, queue[0]);
-                auto mask_pop = child.field.pop();
+        // Continues searching to evaluate
+        candidate.eval = build::dfs(child, queue, w, 1);
 
-                // Death
-                if (child.field.get_height(2) > 11) {
-                    continue;
-                }
+        // This child leads to a dead end, so we prune it
+        if (candidate.eval.value == INT32_MIN) {
+            continue;
+        }
 
-                // Updates child's stats
-                child.tear += root.field.get_drop_pair_frame(placement.x, placement.r) - 1;
-                child.waste += mask_pop.get_size();
-
-                candidate.eval_fast = eval::evaluate(child.field, child.tear, child.waste, w).value;
-
-                // Continues searching to evaluate
-                candidate.eval = build::dfs(child, queue, w, 1);
-
-                // This child leads to a dead end, so we prune it
-                if (candidate.eval.value == INT32_MIN) {
-                    continue;
-                }
-
-                // Locks mutex and pushes the candidate
-                {
-                    std::lock_guard<std::mutex> lk(mtx);
-                    result.candidates.push_back(std::move(candidate));
-                }
-            }
-        });
-    }
-
-    // Joins threads
-    for (auto& t : threads) {
-        t.join();
+        // Pushes the candidate to result
+        result.candidates.push_back(std::move(candidate));
     }
 
     return result;
 };
 
-// Depth first search
+// Depth first search (Fixed to Node& to match build.h)
 eval::Result dfs(Node& node, cell::Queue& queue, eval::Weight& w, i32 depth)
 {
-    auto result = eval::Result();
+    if (depth >= queue.size()) {
+        return eval::evaluate(node.field, node.tear, node.waste, w);
+    }
 
-    // Generates possible placements
     auto placements = move::generate(node.field, queue[depth].first == queue[depth].second);
 
+    eval::Result best = eval::Result();
+
     for (i32 i = 0; i < placements.get_size(); ++i) {
-        // Creates child node
+        auto placement = placements[i];
+
         auto child = node;
-        child.field.drop_pair(placements[i].x, placements[i].r, queue[depth]);
+
+        child.field.drop_pair(placement.x, placement.r, queue[depth]);
         auto mask_pop = child.field.pop();
 
-        // Checks for death
+        // Death
         if (child.field.get_height(2) > 11) {
             continue;
         }
 
-        // Updates stats
-        child.tear += node.field.get_drop_pair_frame(placements[i].x, placements[i].r) - 1;
-        child.waste += mask_pop.get_size();
+        // Updates child's stats
+        child.tear += node.field.get_drop_pair_frame(placement.x, placement.r) - 1;
+        child.waste += static_cast<i32>(mask_pop.get_size());
 
-        // Evaluates
-        eval::Result eval = eval::Result();
+        // Recursion
+        auto eval = dfs(child, queue, w, depth + 1);
 
-        if (depth + 1 < queue.size()) {
-            // Continues search if we aren't at the end of the queue
-            eval = build::dfs(child, queue, w, depth + 1);
-        }
-        else {
-            // Evaluates if we are at the end of the queue
-            eval = eval::evaluate(child.field, child.tear, child.waste, w);
-        }
-
-        // Updates the best eval score
-        if (eval.value > result.value) {
-            result.value = eval.value;
-            result.plan = eval.plan;
-        }
-
-        // Updates the highest possible chain score from this field
-        if (eval.q > result.q) {
-            result.q = eval.q;
+        if (eval.value > best.value) {
+            best = eval;
         }
     }
 
-    return result;
+    return best;
 };
 
 };

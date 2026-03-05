@@ -14,6 +14,7 @@ emcc -O3 \
     -std=c++20 \
     -msimd128 \
     -msse4.1 \
+    -s ASSERTIONS=1 \
     -s ALLOW_MEMORY_GROWTH=1 \
     -s EXPORTED_RUNTIME_METHODS='["ccall", "cwrap"]' \
     -s MODULARIZE=1 \

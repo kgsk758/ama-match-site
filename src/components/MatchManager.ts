@@ -29,10 +29,11 @@ export default class MatchManager {
 
         // 2. Initialize controllers for each player
         this.teamConfig.forEach((c, idx) => {
+            const player0 = this.gameManager.players[0];
             const player = this.gameManager.players[idx];
             let controller: Controller;
             if (c.type === PLAYER_CONFIG.AI) {
-                controller = new AIController(player, this.scene, this.playerPlaces[idx], c);
+                controller = new AIController(player,  player0, this.scene, this.playerPlaces[idx], c);
             } else {
                 controller = new Controller(player, this.scene, this.playerPlaces[idx], c);
             }

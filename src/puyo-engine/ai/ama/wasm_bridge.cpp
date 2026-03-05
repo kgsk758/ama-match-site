@@ -25,6 +25,7 @@ void initAI(std::string configJson) {
 }
 
 void setField(int playerIdx, int x, int y, int type) {
+    if (type < 0 || type >= 5) return; // Only set bits for RED, YELLOW, GREEN, BLUE, GARBAGE (0-4)
     gaze::Player& p = (playerIdx == 0) ? g_player1 : g_player2;
     p.field.set_cell(x, y, static_cast<cell::Type>(type));
 }
@@ -42,9 +43,12 @@ void setQueue(int playerIdx, std::vector<int> colors) {
     }
 }
 
-void setStats(int playerIdx, int attack, bool allClear, int bonus) {
+void setStats(int playerIdx, int attack, int attack_chain, int attack_frame, int dropping, bool allClear, int bonus) {
     gaze::Player& p = (playerIdx == 0) ? g_player1 : g_player2;
     p.attack = attack;
+    p.attack_chain = attack_chain;
+    p.attack_frame = attack_frame;
+    p.dropping = dropping;
     p.all_clear = allClear;
     p.bonus = bonus;
 }

@@ -45,6 +45,7 @@ export default class Controller {
         }
 
         this.currentState = 'INIT';
+        this.initiate();
         this.dropTsumo();
     }
 
@@ -63,11 +64,7 @@ export default class Controller {
 
     protected currentState: 'INIT' | 'FALLING' | 'LANDING' = 'INIT';
     // ツモ->設置->連鎖->おじゃま のメインフローを記述
-    protected start(){
-        this.dropTsumo();
-    }
-
-    protected dropTsumo(){
+    protected initiate(){
         this.activeAnimations = [];
         this.movingAnimations = [];
         this.isGrounded = false;
@@ -76,9 +73,11 @@ export default class Controller {
         this.moveCount = 0;
         this.lockDownCount = 0;
         this.lockDownReset = 0;
+    }
+
+    protected dropTsumo(){
         this.player.drop();
         this.boardView.initMovingPuyo(this.getMovingPuyo());
-        console.log(this.player.place);
         this.player.place.forEach((value,index)=>{this.puyosToSet.push(index);});
         this.refreshView();
         this.currentState = 'FALLING';
@@ -171,7 +170,6 @@ export default class Controller {
                     if(!this.isGrounded){//床についた瞬間
                         this.handleMovingBounce();
 
-                        console.log('just landed');
                         this.lockDownReset++;
                     }
                     this.isGrounded = true;
@@ -201,22 +199,22 @@ export default class Controller {
         }
     }
 
-    private dropStep(){
+    protected dropStep(){
         this.player.moveDown();
         this.boardView.moveAxis(this.getMovingPuyo());
     }
 
-    private moveRight(){
+    protected moveRight(){
         this.player.moveRight();
         this.boardView.moveAxis(this.getMovingPuyo());
     }
 
-    private moveLeft(){
+    protected moveLeft(){
         this.player.moveLeft();
         this.boardView.moveAxis(this.getMovingPuyo());
     }
 
-    private async landPuyo(){
+    protected async landPuyo(){
         this.currentState = 'LANDING';
 
         // 1. まず操作中のアニメーション（回転など）がすべて終わるのを待つ
@@ -281,6 +279,7 @@ export default class Controller {
             chainCount++;
         }
         
+        this.initiate();
         this.dropTsumo();
     }
     /**
