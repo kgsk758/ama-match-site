@@ -10,16 +10,16 @@ import { CONTROLLER_CONFIG } from "./controller-config";
 
 export default class Controller {
     // --- Components ---
-    private player: Player;
-    private scene: Phaser.Scene;
-    private boardView: BoardView;
-    private garbageView: GarbageView;
-    private scoreView: ScoreView;
-    private nextView: NextView;
-    private acView: ACView;
+    protected player: Player;
+    protected scene: Phaser.Scene;
+    protected boardView: BoardView;
+    protected garbageView: GarbageView;
+    protected scoreView: ScoreView;
+    protected nextView: NextView;
+    protected acView: ACView;
 
     // --- Input Keys ---
-    private keys: {
+    protected keys: {
         down?: Phaser.Input.Keyboard.Key,
         left?: Phaser.Input.Keyboard.Key,
         right?: Phaser.Input.Keyboard.Key,
@@ -61,13 +61,13 @@ export default class Controller {
         };
     }
 
-    private currentState: 'INIT' | 'FALLING' | 'LANDING' = 'INIT';
+    protected currentState: 'INIT' | 'FALLING' | 'LANDING' = 'INIT';
     // ツモ->設置->連鎖->おじゃま のメインフローを記述
-    private start(){
+    protected start(){
         this.dropTsumo();
     }
 
-    private dropTsumo(){
+    protected dropTsumo(){
         this.activeAnimations = [];
         this.movingAnimations = [];
         this.isGrounded = false;
@@ -84,15 +84,15 @@ export default class Controller {
         this.currentState = 'FALLING';
     }
 
-    private dropCount: number = 0;
-    private softDropCount: number = 0;
-    private isGrounded: boolean = false;
-    private moveCount: number = 0;
-    private lockDownCount: number = 0;
-    private lockDownReset: number = 0;
-    private puyosToSet: number[] = []; 
-    private activeAnimations: Promise<void>[] = []; 
-    private movingAnimations: Promise<void>[] = []; 
+    protected dropCount: number = 0;
+    protected softDropCount: number = 0;
+    protected isGrounded: boolean = false;
+    protected moveCount: number = 0;
+    protected lockDownCount: number = 0;
+    protected lockDownReset: number = 0;
+    protected puyosToSet: number[] = []; 
+    protected activeAnimations: Promise<void>[] = []; 
+    protected movingAnimations: Promise<void>[] = []; 
 
     /**
      * メイン更新ループ

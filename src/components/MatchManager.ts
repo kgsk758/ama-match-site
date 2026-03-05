@@ -2,6 +2,7 @@ import Phaser from "phaser";
 import { PLAYER_CONFIG } from "../constants";
 import GameManager from "../puyo-engine/core/GameManager";
 import Controller from "./player/Controller";
+import AIController from "./player/AIController";
 
 export default class MatchManager {
     private teamConfig: {team: number, type: string}[];
@@ -29,7 +30,12 @@ export default class MatchManager {
         // 2. Initialize controllers for each player
         this.teamConfig.forEach((c, idx) => {
             const player = this.gameManager.players[idx];
-            const controller = new Controller(player, this.scene, this.playerPlaces[idx], c);
+            let controller: Controller;
+            if (c.type === PLAYER_CONFIG.AI) {
+                controller = new AIController(player, this.scene, this.playerPlaces[idx], c);
+            } else {
+                controller = new Controller(player, this.scene, this.playerPlaces[idx], c);
+            }
             this.controllers.push(controller);
         });
 

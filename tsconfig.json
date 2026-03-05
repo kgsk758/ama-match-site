@@ -14,5 +14,5 @@
     "resolveJsonModule": true,
     "noEmit": true
   },
-  "include": ["src/**/*"]
+  "include": ["src/**/*", "public/assets/ama_ai.js"]
 }
