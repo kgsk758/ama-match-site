@@ -66,7 +66,6 @@ Result build(
 
     switch (type)
     {
-    case search::Type::BUILD:
     case search::Type::FREESTYLE:
         dfs_build = bsearch.freestyle;
         break;
@@ -84,7 +83,6 @@ Result build(
 
         switch (type)
         {
-        case search::Type::BUILD:
         case search::Type::FREESTYLE:
             dfs_w = configs.freestyle;
             break;
@@ -481,8 +479,8 @@ Result think(
                         i32 a_over_enemy_gaze = (a.attack.score + self.bonus) / target_point >= enemy_attack + enemy_harass;
                         i32 b_over_enemy_gaze = (b.attack.score + self.bonus) / target_point >= enemy_attack + enemy_harass;
 
-                        if (a_over_enemy_gaze != b_over_enemy_gaze) {
-                            return a_over_enemy_gaze < b_over_enemy_gaze;
+                        if (a_over_enemy_gaze != a_over_enemy_gaze) {
+                            return a_over_enemy_gaze < a_over_enemy_gaze;
                         }
 
                         // Checks if these attacks return garbages

@@ -7,6 +7,9 @@ echo "Compiling with emcc..."
 emcc -O3 \
     $CPP_FILES \
     --bind \
+    -pthread \
+    -s PTHREAD_POOL_SIZE=4 \
+    -s SINGLE_FILE=1 \
     -I. \
     -I./ai \
     -I./core \

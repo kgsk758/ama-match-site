@@ -52,7 +52,7 @@ export const SCORE_CONFIG = {
     ALL_CLEAR_BONUS: 2100, // Score equivalent to 30 garbage puyos
 }
 export const SEED_CONFIG = {
-    DEFAULT_SEED: 1111,
+    DEFAULT_SEED: 1121,
 }
 
 export const SCORE_PER_GARBAGE = 70;

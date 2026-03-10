@@ -1,105 +1,79 @@
+// src/components/player/AIController.ts
 import Controller from "./Controller";
 import Player from "../../puyo-engine/core/Player";
-import aiConfig from "../../../public/assets/config.json";
+import { AIBridge } from "../../ai/bridge";
+import { AIPlayerData, AIThinkRequest } from "../../ai/types";
 
 export default class AIController extends Controller {
     protected targetX: number = 2;
-    protected targetR: number = 0; 
-    protected aiReady: boolean = false;
-    protected static wasmModule: any = null;
+    protected targetR: number = 0;
     private enemy: Player;
-    
+    private aiBridge: AIBridge;
+
     // Timer to prevent getting stuck if movement is blocked
     protected stuckTimer: number = 0;
 
     constructor(self: Player, enemy: Player, scene: Phaser.Scene, place: {x:number, y:number}, config: {team: number, type: string}) {
-        super(self, scene, place, config);
+        super(self, scene, place, config); // Note: parent expects 'player' but we receive it as 'self'
         this.enemy = enemy;
-        this.initAI();
-    }
-
-    async initAI() {
-        console.log("AI: Initializing...");
-        if (!AIController.wasmModule) {
-            const createAmaAI = (window as any).createAmaAI;
-            if (createAmaAI) {
-                try {
-                    AIController.wasmModule = await createAmaAI({
-                        locateFile: (path: string) => `/assets/${path}`
-                    });
-                    AIController.wasmModule.initAI(JSON.stringify(aiConfig));
-                    console.log("AI: WASM and Config Loaded.");
-                } catch (e) {
-                    console.error("AI: Init Error:", e);
-                }
-            }
-        }
-        this.aiReady = !!AIController.wasmModule;
+        this.aiBridge = AIBridge.getInstance();
+        this.aiBridge.init();
     }
 
     protected dropTsumo() {
         this.stuckTimer = 0; // Reset timer
-        if (this.aiReady) {
+        if (this.aiBridge && this.aiBridge.isReady()) {
             this.think();
         }
-        super.dropTsumo(); // Create new puyo AFTER thinking
+        super.dropTsumo(); // Create new puyo AFTER triggering think
     }
 
     protected think() {
-        const wasm = AIController.wasmModule;
-        if (!wasm || !this.enemy) return;
+        if (!this.enemy) return;
 
-        const selfPlayer = this.player;
-        const enemyPlayer = this.enemy;
         const TARGET_POINT = 70;
 
-        [selfPlayer, enemyPlayer].forEach((p, idx) => {
-            if (!p) return;
-            wasm.clearField(idx);
+        const preparePlayerData = (p: Player, isSelf: boolean): AIPlayerData => {
+            const stats = p.getStats(TARGET_POINT);
+            const queue: number[] = [];
 
-            p.board.grid.forEach((col: number[], x: number) => {
-                col.forEach((cell: number, y: number) => {
-                    if (cell < 5) wasm.setField(idx, x, y, cell);
-                });
-            });
-
-            // Sync Queue (Thinking BEFORE drop, so next[0] is about to be 'moving')
-            const vector = new wasm.VectorInt();
-            if (idx === 0) {
-                // Self: needs 3 pairs
-                // 1. p.next[0] (Will be current)
-                // 2. p.next[1] (Will be next1)
-                // 3. (p as any).queue.queue[0] (Will be next2)
+            if (isSelf) {
                 const next0 = p.next[0];
                 const next1 = p.next[1];
                 const headOfQueue = (p as any).queue?.queue[0];
-
-                if (next0) next0.forEach((c: number) => vector.push_back(c));
-                if (next1) next1.forEach((c: number) => vector.push_back(c));
-                if (headOfQueue) headOfQueue.forEach((c: number) => vector.push_back(c));
+                if (next0) next0.forEach((c: number) => queue.push(c));
+                if (next1) next1.forEach((c: number) => queue.push(c));
+                if (headOfQueue) headOfQueue.forEach((c: number) => queue.push(c));
             } else {
-                // Enemy: needs 2 pairs for prediction
-                // 1. p.next[0]
-                // 2. p.next[1]
                 const next0 = p.next[0];
                 const next1 = p.next[1];
-                if (next0) next0.forEach((c: number) => vector.push_back(c));
-                if (next1) next1.forEach((c: number) => vector.push_back(c));
+                if (next0) next0.forEach((c: number) => queue.push(c));
+                if (next1) next1.forEach((c: number) => queue.push(c));
             }
-            
-            if (vector.size() >= 2) {
-                wasm.setQueue(idx, vector);
-            }
-            vector.delete();
 
-            const stats = p.getStats(TARGET_POINT);
-            wasm.setStats(idx, stats.attack, stats.attack_chain, stats.attack_frame, 0, stats.allClear, 0);
+            return {
+                grid: p.board.grid.map(col => [...col]),
+                queue: queue,
+                stats: {
+                    attack: stats.attack,
+                    attack_chain: stats.attack_chain,
+                    attack_frame: stats.attack_frame,
+                    allClear: stats.allClear
+                }
+            };
+        };
+
+        const request: AIThinkRequest = {
+            selfData: preparePlayerData(this.player, true), // Controller has protected this.player
+            enemyData: preparePlayerData(this.enemy, false),
+            targetPoint: TARGET_POINT
+        };
+
+        this.aiBridge.think(request, (result) => {
+            this.targetX = result.x;
+            this.targetR = result.r;
+            console.log(`AI Think Result: targetX=${this.targetX}, targetR=${this.targetR}`);
         });
-
-        const result = wasm.runThink(TARGET_POINT);
-        this.targetX = result.x;
-        this.targetR = result.r;
-        console.log(`AI Think: targetX=${this.targetX}, targetR=${this.targetR}`);
     }
 
     public update(time: number, delta: number) {

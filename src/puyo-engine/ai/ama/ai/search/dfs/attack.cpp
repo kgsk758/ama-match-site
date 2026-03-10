@@ -31,85 +31,109 @@ Result search(
     // Generates placements
     auto placements = move::generate(field, queue[0].first == queue[0].second);
 
-    // Divides the works sequentially (Modified for Emscripten: no threads)
-    while (placements.get_size() > 0)
-    {
-        move::Placement placement = placements[placements.get_size() - 1];
-        placements.pop();
+    // Divides the works among the threads
+    std::mutex mtx;
+    std::vector<std::thread> threads;
 
-        // Creates candidate
-        Candidate candidate = Candidate {
-            .placement = placement,
-            .attack_max = attack::Data(),
-            .attacks = std::vector<attack::Data>(),
-            .attacks_ac = std::vector<attack::Data>(),
-            .attacks_detect = std::vector<attack::Data>()
-        };
+    for (i32 t = 0; t < thread_count; ++t) {
+        threads.emplace_back([&] () {
+            while (true)
+            {
+                move::Placement placement;
 
-        candidate.attacks.reserve(512);
-        candidate.attacks_detect.reserve(512);
+                // Locks mutex and takes 1 placements from the placements list above
+                {
+                    std::lock_guard<std::mutex> lk(mtx);
+                    if (placements.get_size() < 1) {
+                        break;
+                    }
+                    placement = placements[placements.get_size() - 1];
+                    placements.pop();
+                }
 
-        // Creates child node
-        auto child = root;
+                // Creates candidate
+                Candidate candidate = Candidate {
+                    .placement = placement,
+                    .attack_max = attack::Data(),
+                    .attacks = std::vector<attack::Data>(),
+                    .attacks_ac = std::vector<attack::Data>(),
+                    .attacks_detect = std::vector<attack::Data>()
+                };
 
-        child.field.drop_pair(placement.x, placement.r, queue[0]);
-        auto mask_pop = child.field.pop();
+                candidate.attacks.reserve(512);
+                candidate.attacks_detect.reserve(512);
 
-        // Checks for death
-        if (child.field.get_height(2) > 11) {
-            continue;
-        }
+                // Creates child node
+                auto child = root;
 
-        // Gets chain score
-        auto chain = chain::get_score(mask_pop);
+                child.field.drop_pair(placement.x, placement.r, queue[0]);
+                auto mask_pop = child.field.pop();
 
-        if (chain.count > 0) {
-            // Pushes attack to the candidate
-            auto attack = attack::Data {
-                .count = chain.count,
-                .score = chain.score,
-                .score_total = chain.score,
-                .frame = 0,
-                .frame_real = root.field.get_drop_pair_frame(placement.x, placement.r),
-                .all_clear = child.field.is_empty(),
-                .redundancy = INT32_MAX,
-                .link = eval::get_link(child.field),
-                .parent = root.field,
-                .result = child.field
-            };
+                // Checks for death
+                if (child.field.get_height(2) > 11) {
+                    continue;
+                }
 
-            candidate.attacks.push_back(attack);
+                // Gets chain score
+                auto chain = chain::get_score(mask_pop);
 
-            // Checks for all clear
-            if (attack.all_clear) {
-                candidate.attacks_ac.push_back(attack);
+                if (chain.count > 0) {
+                    // Pushes attack to the candidate
+                    auto attack = attack::Data {
+                        .count = chain.count,
+                        .score = chain.score,
+                        .score_total = chain.score,
+                        .frame = 0,
+                        .frame_real = root.field.get_drop_pair_frame(placement.x, placement.r),
+                        .all_clear = child.field.is_empty(),
+                        .redundancy = INT32_MAX,
+                        .link = eval::get_link(child.field),
+                        .parent = root.field,
+                        .result = child.field
+                    };
+
+                    candidate.attacks.push_back(attack);
+
+                    // Checks for all clear
+                    if (attack.all_clear) {
+                        candidate.attacks_ac.push_back(attack);
+                    }
+
+                    // Updates max attack
+                    candidate.attack_max = attack;
+                }
+
+                // Accumulates stats
+                child.score += chain.score;
+                child.frame += root.field.get_drop_pair_frame(placement.x, placement.r) + chain.count * 2 + frame_delay;
+
+                // Continues searching
+                attack::dfs(
+                    child,
+                    queue,
+                    candidate,
+                    1,
+                    detect,
+                    frame_delay
+                );
+
+                // Dead end
+                if (candidate.attacks.empty()) {
+                    continue;
+                }
+
+                // Locks mutex and pushes candidate
+                {
+                    std::lock_guard<std::mutex> lk(mtx);
+                    result.candidates.push_back(candidate);
+                }
             }
-        }
+        });
+    }
 
-        // Updates max attack
-        candidate.attack_max = candidate.attacks.empty() ? attack::Data() : candidate.attacks.back();
-
-        // Accumulates stats
-        child.score += chain.score;
-        child.frame += root.field.get_drop_pair_frame(placement.x, placement.r) + chain.count * 2 + frame_delay;
-
-        // Continues searching
-        attack::dfs(
-            child,
-            queue,
-            candidate,
-            1,
-            detect,
-            frame_delay
-        );
-
-        // Dead end
-        if (candidate.attacks.empty()) {
-            continue;
-        }
-
-        // Pushes candidate to result
-        result.candidates.push_back(candidate);
+    // Joins all threads
+    for (auto& t : threads) {
+        t.join();
     }
 
     return result;
@@ -125,20 +149,13 @@ void dfs(
     i32 frame_delay
 )
 {
-    if (depth >= queue.size()) {
-        return;
-    }
-
-    // Generates placements
+    // Generates possible placements
     auto placements = move::generate(node.field, queue[depth].first == queue[depth].second);
 
     for (i32 i = 0; i < placements.get_size(); ++i) {
-        auto placement = placements[i];
-
-        // Creates child node
+        // Creates child
         auto child = node;
-
-        child.field.drop_pair(placement.x, placement.r, queue[depth]);
+        child.field.drop_pair(placements[i].x, placements[i].r, queue[depth]);
         auto mask_pop = child.field.pop();
 
         // Checks for death
@@ -149,18 +166,14 @@ void dfs(
         // Gets chain score
         auto chain = chain::get_score(mask_pop);
 
-        // Accumulates stats
-        child.score += chain.score;
-        child.frame += node.field.get_drop_pair_frame(placement.x, placement.r) + chain.count * 2 + frame_delay;
-
         if (chain.count > 0) {
-            // Pushes attack to the candidate
+            // Pushes attack
             auto attack = attack::Data {
                 .count = chain.count,
                 .score = chain.score,
-                .score_total = child.score,
-                .frame = depth,
-                .frame_real = child.frame,
+                .score_total = child.score + chain.score,
+                .frame = child.frame,
+                .frame_real = child.frame + node.field.get_drop_pair_frame(placements[i].x, placements[i].r),
                 .all_clear = child.field.is_empty(),
                 .redundancy = INT32_MAX,
                 .link = eval::get_link(child.field),
@@ -170,18 +183,26 @@ void dfs(
 
             candidate.attacks.push_back(attack);
 
-            // Updates max attack
-            if (dfs::attack::cmp_main(candidate.attack_max, attack)) {
-                candidate.attack_max = attack;
-            }
-
-            // Checks for all clear
+            // Checks all clear
             if (attack.all_clear) {
                 candidate.attacks_ac.push_back(attack);
             }
 
-            // Continues searching
-            dfs(
+            // Updates max attack
+            candidate.attack_max = std::max(
+                candidate.attack_max,
+                attack,
+                attack::cmp_main
+            );
+        }
+
+        // Updates stats
+        child.score += chain.score;
+        child.frame += node.field.get_drop_pair_frame(placements[i].x, placements[i].r) + chain.count * 2 + frame_delay;
+
+        // Continues searching if we are not at the end of the queue
+        if (depth + 1 < queue.size()) {
+            attack::dfs(
                 child,
                 queue,
                 candidate,
@@ -190,20 +211,30 @@ void dfs(
                 frame_delay
             );
         }
-        else if (detect) {
-            // Continues searching
-            dfs(
-                child,
-                queue,
-                candidate,
-                depth + 1,
-                detect,
-                frame_delay
-            );
+        
+        // If we are at depth 2 and we want to search further
+        if (depth == 1 && detect) {
+            quiet::search(child.field, 1, 2, [&] (quiet::Result q) {
+                auto plan_pop = q.plan;
+                plan_pop.pop();
+
+                candidate.attacks_detect.push_back(attack::Data {
+                    .count = q.chain.count,
+                    .score = q.chain.score,
+                    .score_total = child.score + q.chain.score,
+                    .frame = child.frame + q.plan.get_height(q.x) - child.field.get_height(q.x),
+                    .frame_real = child.frame + 1 + q.plan.get_height(q.x) - child.field.get_height(q.x),
+                    .all_clear = false,
+                    .redundancy = INT32_MAX,
+                    .link = eval::get_link(plan_pop),
+                    .parent = child.field,
+                    .result = plan_pop
+                });
+            });
         }
     }
 };
 
-} // namespace attack
+};
 
-} // namespace dfs
+};
