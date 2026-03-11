@@ -1,6 +1,8 @@
+// src/puyo-engine/core/Player.ts
 import Board from "./Board";
 import Queue from "./Queue";
-import { SEED_CONFIG, SCORE_PER_GARBAGE, SCORE_CONFIG } from "./core-config";
+import { SEED_CONFIG, SCORE_PER_GARBAGE, SCORE_CONFIG, ANIMATION_CONFIG } from "./core-config";
+
 export default class Player {
     public board: Board;
     public moving: number[];
@@ -10,6 +12,13 @@ export default class Player {
     public place: {x:number,y:number}[];
     private dropPlace: {x:number, y:number};
     public deathPlace: {x:number,y:number};
+    
+    public score: number = 0;
+    private attack_score: number = 0;
+    public attack: number = 0;         // 現在の連鎖で発生した未送信の攻撃力
+    public pendingGarbage: number = 0; // 相手から送られてきた、次に降るお邪魔ぷよ
+    public currentChain: number = 0;   // 現在進行中の連鎖数
+
     constructor(queueInst: Queue){
         this.queue = queueInst;
         this.board = new Board();
@@ -20,131 +29,68 @@ export default class Player {
         this.dropPlace = this.board.getDropPlace();
         this.deathPlace = this.board.getDeathPlace();
     }
-    public score: number = 0;
-    private attack_score: number = 0;
-    private attack: number = 0;
-    /**
-     * 連鎖を実行,スコアに加算,お邪魔数生成,連鎖情報を返す。
-     */
-    public getChain(): {
-        cleared: {
-            cell: number;
-            places: {
-                x: number;
-                y: number;
-            }[];
-        }[];
-        drops: {
-            x: number;
-            fromY: number;
-            toY: number;
-            cell: number;
-        }[];
-        score: number;
-    }[]{
-        const chain = this.board.getChain();
-
-        if (this.allClear && chain.length > 0) {
-            chain[0].score += SCORE_CONFIG.ALL_CLEAR_BONUS;
-            this.allClear = false;
-        }
-
-        chain.forEach((c)=>{
-            this.score += c.score;
-            this.attack_score += c.score;
-        })
-
-        if (this.board.isEmpty()) {
-            this.allClear = true;
-        }
-
-        this.attack += Math.floor(this.attack_score / SCORE_PER_GARBAGE);
-        this.attack_score = this.attack_score % SCORE_PER_GARBAGE;
-        return chain;
-    }
 
     public executeChainStep(chainCount: number) {
         const step = this.board.executeChainStep(chainCount);
         if (step) {
+            this.currentChain = chainCount; // 現在の連鎖数を記録
             if (this.allClear && chainCount === 1) {
                 step.score += SCORE_CONFIG.ALL_CLEAR_BONUS;
                 this.allClear = false;
             }
             this.score += step.score;
             this.attack_score += step.score;
-            this.attack += Math.floor(this.attack_score / SCORE_PER_GARBAGE);
-            this.attack_score = this.attack_score % SCORE_PER_GARBAGE;
+            
+            // 攻撃力を計算
+            const newAttack = Math.floor(this.attack_score / SCORE_PER_GARBAGE);
+            if (newAttack > 0) {
+                this.attack += newAttack;
+                this.attack_score = this.attack_score % SCORE_PER_GARBAGE;
+                // 自分の連鎖中に、自分に溜まっているお邪魔を即座に相殺する
+                this.offsetMyGarbage();
+            }
         }
         return step;
     }
 
-    public checkAllClear(): boolean {
-        if (this.board.isEmpty()) {
-            this.allClear = true;
+    /**
+     * 自分の攻撃力(attack)で、自分に届いているお邪魔(pendingGarbage)を相殺する
+     */
+    private offsetMyGarbage() {
+        if (this.attack <= 0 || this.pendingGarbage <= 0) return;
+
+        if (this.attack >= this.pendingGarbage) {
+            this.attack -= this.pendingGarbage;
+            this.pendingGarbage = 0;
+        } else {
+            this.pendingGarbage -= this.attack;
+            this.attack = 0;
         }
-        return this.allClear;
     }
 
-    public getStats(targetPoint: number): {
-        attack: number;
-        attack_frame: number;
-        attack_chain: number;
-        allClear: boolean;
-    } {
-        // Clone the board to simulate future state without affecting the real board
-        const tempBoard = new Board({
-            rows: this.board.rows,
-            columns: this.board.columns
-        });
-        tempBoard.grid = this.board.grid.map(col => [...col]);
+    /**
+     * 連鎖終了時、残った攻撃力を取り出す（リセットする）
+     */
+    public consumeAttack(): number {
+        const leftover = this.attack;
+        this.attack = 0;
+        return leftover;
+    }
 
-        let totalScore = this.attack_score; // Include current partial score
-        let currentChain = 0;
-        let frameCount = 0;
-
-        // Simulate the entire chain process
-        while (true) {
-            const connects = tempBoard.getConnected();
-            if (connects.length === 0) break;
-
-            currentChain++;
-            const score = tempBoard.getScore(connects, currentChain);
-            totalScore += score;
-
-            // Remove popped puyos
-            connects.forEach(c => {
-                c.places.forEach(p => {
-                    tempBoard.grid[p.x][p.y] = 5; // NONE
-                });
-            });
-
-            // Simulate drop
-            tempBoard.drop();
-
-            // Calculate frames for this chain step
-            // Approximate frames: Pop animation + Drop animation
-            // Assuming 60fps, common puyo timing: 
-            // - Pop: ~20-30 frames
-            // - Drop: ~10-20 frames
-            frameCount += 40; 
-        }
-
-        const futureAttack = Math.floor(totalScore / targetPoint);
-
-        return {
-            attack: this.attack + futureAttack,
-            attack_frame: frameCount,
-            attack_chain: currentChain,
-            allClear: this.allClear && tempBoard.isEmpty()
-        };
+    public dropGarbage(): {x: number, y: number}[]{
+        const placed = this.board.dropGarbage(this.pendingGarbage);
+        this.pendingGarbage -= placed.length;
+        return placed;
     }
 
     public drop(){
+        this.currentChain = 0; // 次のツモが来たら連鎖カウントをリセット
         this.moving = this.next.shift()!;
         this.next.push(this.queue.popQueue());
         this.place = [{x: this.dropPlace.x, y: this.dropPlace.y}, {x:this.dropPlace.x,y:this.dropPlace.y+1}];
         this.lastRotation = 'none';
     }
+
     public fixToBoard(){
         this.place.forEach((p, i) => {
             this.board.setPuyo(p.x, Math.floor(p.y), this.moving[i]);
@@ -152,6 +98,7 @@ export default class Player {
         this.board.drop();
         this.moving = [];
     }
+
     public moveDown(): boolean{
         const step = 0.5
         const newPlace: {x:number,y:number}[]=[];
@@ -169,6 +116,7 @@ export default class Player {
         }
         return false;
     }
+
     public canMoveDown(): boolean {
         const step = 0.5;
         let valid = true;
@@ -179,6 +127,7 @@ export default class Player {
         });
         return valid;
     }
+
     public moveLeft(): boolean {
         const step = 1;
         const newPlace: {x:number,y:number}[]=[];
@@ -196,6 +145,7 @@ export default class Player {
         }
         return false;
     }
+
     public moveRight(): boolean {
         const step = 1;
         const newPlace: {x:number,y:number}[]=[];
@@ -213,6 +163,7 @@ export default class Player {
         }
         return false;
     }
+
     private lastRotation:  'left' | 'right' | 'none' = 'none'
 
     public rotateLeft(){
@@ -222,93 +173,178 @@ export default class Player {
         this.performRotation('right');
     }
 
-    private updateLastRotation(direction: 'left' | 'right') {
-        this.lastRotation = direction;
-    }
-
     private performRotation(direction: 'left' | 'right') {
         const p0 = this.place[0];
         const p1 = this.place[1];
-    
         const dx = p1.x - p0.x;
         const dy = p1.y - p0.y;
+        const [nx, ny] = (direction === 'left') ? [p0.x - dy, p0.y + dx] : [p0.x + dy, p0.y - dx];
     
-        const [nx, ny] = (() => {
-            if (direction === 'left') return [p0.x - dy, p0.y + dx];
-            return [p0.x + dy, p0.y - dx];
-        })();
-    
-        // 1. Direct rotation
         if (this.isValidPosition(nx, ny)) {
             this.place[1] = { x: nx, y: ny };
-            this.updateLastRotation(direction);
+            this.lastRotation = direction;
             return;
         }
     
-        // 2. Kicks
-        // 2a. Wall Kick (Prioritize side shift when hitting walls or puyos)
         const preferredSx = nx > p0.x ? -1 : (nx < p0.x ? 1 : 0);
         if (preferredSx !== 0) {
             for (const sx of [preferredSx, -preferredSx]) {
                 if (this.isValidPosition(p0.x + sx, p0.y) && this.isValidPosition(nx + sx, ny)) {
                     this.place[0].x += sx;
                     this.place[1] = { x: nx + sx, y: ny };
-                    this.updateLastRotation(direction);
+                    this.lastRotation = direction;
                     return;
                 }
             }
         }
 
-        // 2b. Ground Kick (Floor kick / Upward kick as last resort)
         const isGroundClip = Math.floor(Math.min(ny, p0.y)) < 0 || (this.isValidPosition(nx, ny) === false && ny < p0.y);
         if (isGroundClip) {
-            // Try kick up 0.5
             if (this.isValidPosition(p0.x, p0.y + 0.5) && this.isValidPosition(nx, ny + 0.5)) {
                 this.place[0].y += 0.5;
                 this.place[1] = { x: nx, y: ny + 0.5 };
-                this.updateLastRotation(direction);
+                this.lastRotation = direction;
                 return;
             }
-            // Try kick up 1.0 
             if (this.isValidPosition(p0.x, p0.y + 1) && this.isValidPosition(nx, ny + 1)) {
-                //14段目に軸ぷよが行くなら却下
-                if(p0.y + 1 === this.board.rows - 1) return; 
+                if(p0.y + 1 >= this.board.rows - 1) return; 
                 this.place[0].y += 1;
                 this.place[1] = { x: nx, y: ny + 1 };
-                this.updateLastRotation(direction);
+                this.lastRotation = direction;
                 return;
             }
         }
     
-        // 3. Flip (180 deg rotation)
-        if (this.lastRotation !== 'none') {
-            //縦回転じゃないときは却下
-            if(this.place[0].x !== this.place[1].x) return;
-            // 180度回転時は常に軸ぷよと回転ぷよの位置を入れ替える（クイックターン）
+        if (this.lastRotation !== 'none' && this.place[0].x === this.place[1].x) {
             const temp = this.place[0];
             this.place[0] = this.place[1];
             this.place[1] = temp;
-
-            this.lastRotation = 'none'; // ダブルタップ判定をリセット
+            this.lastRotation = 'none';
             return;
         }
-    
-        // If all else fails, still update rotation for next attempt
-        this.updateLastRotation(direction);
+        this.lastRotation = direction;
     }
 
     public isValidPosition(x: number, y: number): boolean {
         const ix = Math.floor(x);
         const iy = Math.floor(y);
-        
-        // 軸となるセルをチェック
         if (!this.board.isValid(ix, iy)) return false;
-        
-        // yが整数でない（.5など）場合、上のセルもチェック（ぷよが2つのセルに跨っているため）
-        if (y !== iy) {
-            if (!this.board.isValid(ix, iy + 1)) return false;
-        }
-        
+        if (y !== iy && !this.board.isValid(ix, iy + 1)) return false;
         return true;
+    }
+
+    public getStats(targetPoint: number, includeMoving: boolean = true): {
+        attack: number;
+        attack_frame: number;
+        attack_chain: number;
+        allClear: boolean;
+    } {
+        const tempBoard = new Board({
+            rows: this.board.rows,
+            columns: this.board.columns
+        });
+        tempBoard.grid = this.board.grid.map(col => [...col]);
+
+        let totalDuration = 0;
+        const MS_TO_FRAME = 60 / 1000;
+        const FRAME_DELAY = 22; 
+        const INITIAL_COST = 20; 
+
+        // 1. 設置までの時間のシミュレーション
+        if (includeMoving && this.moving && this.moving.length > 0) {
+            totalDuration += INITIAL_COST;
+
+            const x0 = Math.floor(this.place[0].x);
+            const x1 = Math.floor(this.place[1].x);
+            let targetY0 = 0;
+            let targetY1 = 0;
+            for (let y = 0; y < this.board.rows; y++) {
+                if (tempBoard.grid[x0][y] === 5) { targetY0 = y; break; }
+            }
+            for (let y = 0; y < this.board.rows; y++) {
+                if (tempBoard.grid[x1][y] === 5) { targetY1 = y; break; }
+            }
+
+            const dropDist = Math.max(0, Math.min(this.place[0].y - targetY0, this.place[1].y - targetY1));
+            totalDuration += dropDist * 250; 
+
+            const isVertical = x0 === x1;
+            if (!isVertical) {
+                const p0Grounded = !this.board.isValid(x0, Math.floor(this.place[0].y - 0.5));
+                const p1Grounded = !this.board.isValid(x1, Math.floor(this.place[1].y - 0.5));
+                if (!p0Grounded || !p1Grounded) {
+                    totalDuration += ANIMATION_CONFIG.LAND_DURATION + ANIMATION_CONFIG.BOUNCE_DURATION + (FRAME_DELAY * 2);
+                }
+            }
+
+            this.place.forEach((p, i) => {
+                tempBoard.setPuyo(p.x, Math.floor(p.y), this.moving[i]);
+            });
+            tempBoard.drop();
+        }
+
+        let totalScore = this.attack_score; 
+        let predictedChainCount = 0;
+        let chainSimCount = this.currentChain + 1; // 現在の連鎖の続きからシミュレート
+
+        // 2. 連鎖アニメーションのシミュレーション
+        while (true) {
+            const connects = tempBoard.getConnected();
+            if (connects.length === 0) break;
+
+            totalDuration += ANIMATION_CONFIG.POP_DURATION + FRAME_DELAY;
+
+            const chainStepResult = tempBoard.executeChainStep(chainSimCount);
+            if (!chainStepResult) break;
+
+            predictedChainCount++;
+            totalScore += chainStepResult.score;
+
+            if (chainStepResult.drops.length > 0) {
+                const maxDropDistance = Math.max(...chainStepResult.drops.map(d => d.fromY - d.toY));
+                totalDuration += ANIMATION_CONFIG.DROP_BASE_DURATION + (maxDropDistance * ANIMATION_CONFIG.DROP_PER_CELL) + ANIMATION_CONFIG.BOUNCE_DURATION + (FRAME_DELAY * 2);
+            }
+
+            totalDuration += ANIMATION_CONFIG.CHAIN_STEP_WAIT + FRAME_DELAY;
+            chainSimCount++;
+        }
+
+        if (predictedChainCount === 0 && (this.currentChain === 0 || chainSimCount === this.currentChain + 1)) {
+            totalDuration += ANIMATION_CONFIG.CHAIN_STEP_WAIT + FRAME_DELAY;
+        }
+
+        const futureAttack = Math.floor(totalScore / targetPoint);
+
+        return {
+            attack: this.attack + futureAttack,
+            attack_frame: Math.floor(totalDuration * MS_TO_FRAME),
+            attack_chain: this.currentChain + predictedChainCount,
+            allClear: this.allClear && tempBoard.isEmpty()
+        };
+    }
+
+    /**
+     * AIに渡すための現在のプレイヤー状態を取得する
+     */
+    public getAIPlayerData(targetPoint: number, isSelf: boolean): any {
+        const stats = this.getStats(targetPoint, false);
+        const queue: number[] = [];
+
+        this.next.forEach(t => t.forEach(c => queue.push(c)));
+        if (isSelf && (this as any).queue?.queue) {
+            const extra = (this as any).queue.queue[0];
+            if (extra) extra.forEach((c: number) => queue.push(c));
+        }
+
+        return {
+            grid: this.board.grid.map(col => [...col]),
+            queue: queue,
+            stats: {
+                attack: stats.attack,
+                attack_chain: stats.attack_chain,
+                attack_frame: stats.attack_frame,
+                allClear: stats.allClear
+            }
+        };
     }
 }

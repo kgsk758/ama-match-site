@@ -1,4 +1,5 @@
 import Phaser from "phaser";
+import { ANIMATION_CONFIG } from "../../puyo-engine/core/core-config";
 
 export default class BoardView {
     // --- Constants ---
@@ -152,7 +153,7 @@ export default class BoardView {
                 alpha: 0,
                 scaleX: 1.5,
                 scaleY: 1.5,
-                duration: 200,
+                duration: ANIMATION_CONFIG.POP_DURATION,
                 onComplete: () => {
                     // 演出が終わったら非表示にする
                     sprites.forEach(s => {
@@ -177,7 +178,7 @@ export default class BoardView {
                 this.scene.tweens.add({
                     targets: sprite,
                     y: targetY,
-                    duration: 100 + (drop.fromY - drop.toY) * 50, // 距離に応じて落下時間を調整
+                    duration: ANIMATION_CONFIG.DROP_BASE_DURATION + (drop.fromY - drop.toY) * ANIMATION_CONFIG.DROP_PER_CELL, // 距離に応じて落下時間を調整
                     ease: 'Quad.easeIn',
                     onComplete: () => {
                         this.doBounceTween(sprite).then(resolve);
@@ -209,11 +210,63 @@ export default class BoardView {
             this.scene.tweens.add({
                 targets: sprite,
                 y: targetPixelY,
-                duration: 150,
+                duration: ANIMATION_CONFIG.LAND_DURATION,
                 ease: 'Quad.easeIn',
                 onComplete: () => {
                     this.doBounceTween(sprite).then(resolve);
                 }
+            });
+        });
+    }
+
+    public async animateGarbageFall(placed: {x: number, y: number}[]): Promise<void> {
+        if (placed.length === 0) return;
+
+        const GARBAGE_COLOR_IDX = 4; // お邪魔ぷよの色
+
+        // 最も下のぷよのy座標を取得し、それが13段目からスタートするようにオフセットを計算
+        const minY = Math.min(...placed.map(p => p.y));
+        const offset = 13 - minY;
+
+        const promises = placed.map(pos => {
+            const sprite = this.boardSprites[pos.x][pos.y];
+            
+            // 全員同じオフセットを加えて開始位置を決める
+            const startY = this.getPixelY(pos.y + offset);
+            const targetY = this.getPixelY(pos.y);
+            
+            sprite.setVisible(true)
+                  .setFillStyle(this.COLOR_MAP[GARBAGE_COLOR_IDX])
+                  .setAlpha(1)
+                  .setScale(1)
+                  .setPosition(this.getPixelX(pos.x), startY);
+
+            return new Promise<void>(resolve => {
+                this.scene.tweens.add({
+                    targets: sprite,
+                    y: targetY,
+                    duration: ANIMATION_CONFIG.GARBAGE_FALL_DURATION, // 移動距離(offset)が全員共通なので一斉に降る
+                    ease: 'Linear',
+                    onComplete: () => {
+                        resolve();
+                    }
+                });
+            });
+        });
+
+        await Promise.all(promises);
+    }
+
+    /**
+     * 指定したミリ秒数だけ演出を待機する（Phaserのカウンターを使用）
+     */
+    public async wait(duration: number): Promise<void> {
+        return new Promise(resolve => {
+            this.scene.tweens.addCounter({
+                from: 0,
+                to: 1,
+                duration: duration,
+                onComplete: () => resolve()
             });
         });
     }
@@ -315,13 +368,13 @@ export default class BoardView {
                     {
                         scaleX: 1.25,
                         scaleY: 0.85,
-                        duration: 30,
+                        duration: Math.floor(ANIMATION_CONFIG.BOUNCE_DURATION * 0.6),
                         ease: 'Quad.easeOut'
                     },
                     {
                         scaleX: 1,
                         scaleY: 1,
-                        duration: 20,
+                        duration: Math.floor(ANIMATION_CONFIG.BOUNCE_DURATION * 0.4),
                         ease: 'Elastic.out',
                         easeParams: [1, 0.3]
                     }
@@ -331,4 +384,5 @@ export default class BoardView {
             });
         });
     }
+
 }

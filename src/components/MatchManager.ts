@@ -1,3 +1,4 @@
+// src/components/MatchManager.ts
 import Phaser from "phaser";
 import { PLAYER_CONFIG } from "../constants";
 import GameManager from "../puyo-engine/core/GameManager";
@@ -33,9 +34,9 @@ export default class MatchManager {
             const player = this.gameManager.players[idx];
             let controller: Controller;
             if (c.type === PLAYER_CONFIG.AI) {
-                controller = new AIController(player,  player0, this.scene, this.playerPlaces[idx], c);
+                controller = new AIController(player, player0, this.gameManager, idx, this.scene, this.playerPlaces[idx], c);
             } else {
-                controller = new Controller(player, this.scene, this.playerPlaces[idx], c);
+                controller = new Controller(player, this.gameManager, idx, this.scene, this.playerPlaces[idx], c);
             }
             this.controllers.push(controller);
         });
@@ -48,12 +49,12 @@ export default class MatchManager {
     private update(time: number, delta: number) {
         if (!(this.scene as any).gamePlaying) return;
         
-        // console.log("MatchManager Update:", time, delta); // デバッグ用
-        // Update all controllers (handling input, animations, and periodic logic)
+        // Update all controllers
         this.controllers.forEach(controller => controller.update(time, delta));
         
-        // Here we can later add GameManager processing like garbage exchange
-        // this.gameManager.processGarbage();
+        // Note: gameManager.processGarbage() is no longer called here.
+        // Garbage exchange is now triggered manually by controllers via sendAttack()
+        // when a chain sequence finishes.
     }
 
     public destroy() {

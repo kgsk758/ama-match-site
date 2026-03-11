@@ -52,7 +52,17 @@ export const SCORE_CONFIG = {
     ALL_CLEAR_BONUS: 2100, // Score equivalent to 30 garbage puyos
 }
 export const SEED_CONFIG = {
-    DEFAULT_SEED: 1121,
+    DEFAULT_SEED: 1141,
+}
+
+export const ANIMATION_CONFIG = {
+    POP_DURATION: 200,      // ぷよが消える演出の時間 (ms)
+    DROP_BASE_DURATION: 100, // 落下の最低時間 (ms)
+    DROP_PER_CELL: 50,       // 1マス落下するごとに加算される時間 (ms)
+    BOUNCE_DURATION: 50,     // 落下後のバウンド演出時間 (ms)
+    LAND_DURATION: 150,      // 設置時の落下時間 (ms)
+    GARBAGE_FALL_DURATION: 300, // お邪魔ぷよの落下時間 (ms)
+    CHAIN_STEP_WAIT: 250,    // 連鎖ステップ間の待機時間 (ms)
 }
 
 export const SCORE_PER_GARBAGE = 70;

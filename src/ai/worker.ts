@@ -43,11 +43,16 @@ self.onmessage = async (e: MessageEvent<AIWorkerRequest>) => {
             wasmModule.clearField(idx);
 
             // Set Grid
+            let puyoCount = 0;
             p.grid.forEach((col: number[], x: number) => {
                 col.forEach((cell: number, y: number) => {
-                    if (cell < 5) wasmModule.setField(idx, x, y, cell);
+                    if (cell < 5) {
+                        wasmModule.setField(idx, x, y, cell);
+                        puyoCount++;
+                    }
                 });
             });
+            // console.log(`[Worker] Player ${idx} grid set. Total puyos: ${puyoCount}`);
 
             // Set Queue
             const vector = new wasmModule.VectorInt();

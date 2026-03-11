@@ -89,6 +89,32 @@ export default class Board {
         return results;
     }
 
+    /**
+     * 指定したぷよグループに隣接するお邪魔ぷよの場所を返す
+     */
+    public getNeighborGarbage(groups: {places: {x:number, y:number}[]}[]): {x:number, y:number}[] {
+        const garbagePlaces: {x:number, y:number}[] = [];
+        const directions = [{ dx: 0, dy: 1 }, { dx: 0, dy: -1 }, { dx: 1, dy: 0 }, { dx: -1, dy: 0 }];
+        
+        groups.forEach(group => {
+            group.places.forEach(p => {
+                for (const dir of directions) {
+                    const nx = p.x + dir.dx;
+                    const ny = p.y + dir.dy;
+                    if (nx >= 0 && nx < this.columns && ny >= 0 && ny < this.rows) {
+                        // @ts-ignore
+                        if (this.grid[nx][ny] === 4) { // 4 は GARBAGE_NUM (CELL_CONFIG.GARBAGE_NUM)
+                            if (!garbagePlaces.some(g => g.x === nx && g.y === ny)) {
+                                garbagePlaces.push({x: nx, y: ny});
+                            }
+                        }
+                    }
+                }
+            });
+        });
+        return garbagePlaces;
+    }
+
     public getScore(connects: {cell: number, places: {x:number, y:number}[]}[], chain: number): number{
         let puyos = 0;
         const colors:number[] = [];
@@ -141,20 +167,37 @@ export default class Board {
     getDropPlace() { return { x: 2, y: 11.5 }; }
     getDeathPlace() { return { x: 2, y: 11 }; }
 
-    public dropGarbage(num: number): number {
-        const garbage = Math.min(30, num);
-        let count = garbage;
-        while(count > 0) {
-            const x = Math.floor(Math.random() * this.columns);
-            for(let y = 0; y < this.rows; y++) {
-                if(this.grid[x][y] === CELL_CONFIG.NONE_NUM) {
+    public dropGarbage(num: number): {x: number, y: number}[] {
+        const maxToDrop = Math.min(30, num);
+        const placed: {x: number, y: number}[] = [];
+
+        // 各列に何個降らせるかを計算
+        const baseRows = Math.floor(maxToDrop / this.columns);
+        const remainder = maxToDrop % this.columns;
+
+        // 列ごとの落下数を配列にセット
+        const columnCounts = new Array(this.columns).fill(baseRows);
+        
+        // 余り分をランダムな列に1つずつ割り振る（重複なし）
+        const randomCols = Array.from({length: this.columns}, (_, i) => i)
+            .sort(() => Math.random() - 0.5)
+            .slice(0, remainder);
+        
+        randomCols.forEach(col => columnCounts[col]++);
+
+        // 各列ごとに下から空いている場所を埋める
+        for (let x = 0; x < this.columns; x++) {
+            let toDrop = columnCounts[x];
+            for (let y = 0; y < this.rows && toDrop > 0; y++) {
+                if (this.grid[x][y] === CELL_CONFIG.NONE_NUM) {
                     this.grid[x][y] = CELL_CONFIG.GARBAGE_NUM;
-                    count--;
-                    break;
+                    placed.push({x, y});
+                    toDrop--;
                 }
             }
         }
-        return garbage;
+        
+        return placed;
     }
 
     public isEmpty(): boolean {
